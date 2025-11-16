@@ -1,0 +1,891 @@
+================================================================================
+ELSEBREW - COMPREHENSIVE ARCHITECTURE & CODEBASE EXPLORATION SUMMARY
+================================================================================
+
+PROJECT OVERVIEW
+================================================================================
+Elsebrew is a Next.js 14 MVP web application that uses AI to help users find 
+coffee shops in destination cities that match the vibe of their favorite local café.
+
+Key Characteristics:
+- MVP Validation Tool (no backend database)
+- AI-Powered Matching (OpenAI LLM + Reddit data + image analysis)
+- Interactive Maps (Google Maps with synchronized list)
+- Premium Design (minimal aesthetic, custom color palette)
+- Analytics-Driven (10+ events for product validation)
+
+
+1. PROJECT STRUCTURE
+================================================================================
+
+CONFIGURATION & SETUP
+  package.json              - Next.js 14, React 18, TypeScript
+  next.config.js            - Standalone output, image domains
+  tailwind.config.ts        - Custom colors (espresso, charcoal, offwhite)
+  postcss.config.mjs        - Tailwind + Autoprefixer
+  .env.example / .env.local - API keys configuration
+  amplify.yml               - AWS Amplify deployment config
+
+PAGES & ROUTES (App Router)
+  app/page.tsx              - Home page (hero + search + email signup)
+  app/results/page.tsx      - Search results (list + map)
+  app/saved/page.tsx        - Saved cafés list
+  app/{about,privacy,terms}/page.tsx - Static pages
+  app/layout.tsx            - Root layout (Header, Footer, Analytics)
+  app/globals.css           - Global styles, custom classes
+
+API ROUTES (Next.js serverless functions)
+  app/api/reason-batch/route.ts - Batch LLM explanations (ACTIVE)
+  app/api/reason/route.ts        - Single LLM explanation (deprecated)
+  app/api/reddit/route.ts        - Reddit café mentions
+  app/api/analyze-image/route.ts - GPT-4 Vision image analysis
+
+COMPONENTS (React)
+  components/home/
+    SearchPanel.tsx         - Main search form (source + destination + vibes)
+    EmailSignup.tsx         - Mailchimp email form
+    PricingStrip.tsx        - "Pro coming soon" fake door
+    TypingTitle.tsx         - Animated hero title
+  
+  components/results/
+    ResultsList.tsx         - Scrollable results cards
+    ResultsMap.tsx          - Google Map with numbered markers
+    DetailsDrawer.tsx       - Details panel with Place card
+    SearchRefinement.tsx    - Additional filtering (unused)
+  
+  components/auth/
+    GoogleSignIn.tsx        - Google Identity Services button
+  
+  components/shared/
+    Header.tsx              - Navigation + user profile
+    Footer.tsx              - Links + Buy Me A Coffee
+    AnalyticsProvider.tsx   - GA4/Plausible script injection
+
+LIBRARIES & UTILITIES
+  lib/places-search.ts      - Google Places Text Search logic
+  lib/scoring.ts            - Café matching algorithm
+  lib/maps-loader.ts        - Google Maps API loader (singleton pattern)
+  lib/storage.ts            - localStorage helpers
+  lib/analytics.ts          - GA4/Plausible event tracking
+
+TYPES
+  types/index.ts            - TypeScript interfaces
+
+
+2. TECHNOLOGY STACK
+================================================================================
+
+FRONTEND
+  Framework:    Next.js 14 (App Router)
+  Runtime:      React 18
+  Language:     TypeScript
+  Styling:      Tailwind CSS 3 + custom components
+  Animations:   Framer Motion
+  Forms:        Native HTML + Google Places Autocomplete
+
+BACKEND/API
+  Runtime:      Node.js (Next.js API routes)
+  External APIs:
+    - Google Maps Platform (Places, Geocoding, Text Search, Embed)
+    - Google OAuth (Identity Services)
+    - OpenAI (GPT-4o-mini for LLM reasoning)
+    - Reddit JSON API (public, no auth)
+
+DATA & STORAGE
+  Client:       localStorage (user profile, saved cafés)
+  Server:       In-memory caching (API responses)
+  Database:     None (MVP client-side only)
+
+DEPLOYMENT
+  Platform:     AWS Amplify (auto-detects Next.js)
+  Build:        npm run build → Standalone output
+  Output Mode:  'standalone' (Docker-compatible)
+  Images:       Optimized via Next.js, served from Google
+
+
+3. DATA FLOW: HOME → SEARCH → RESULTS
+================================================================================
+
+STEP 1: HOME PAGE
+  User lands on homepage (/)
+    └─ SearchPanel loads with Google Places Autocomplete
+       ├─ Source café field (types and autocompletes)
+       ├─ Destination city field (geocodes to get bounds)
+       └─ 6 vibe toggle checkboxes
+
+STEP 2: SEARCH SUBMISSION
+  User clicks "Find my twins"
+    └─ Validation: sourcePlaceId, destCity, and vibes must exist
+    └─ analytics.searchSubmit() event tracked
+    └─ Navigate to /results with URLSearchParams:
+       ├─ sourcePlaceId
+       ├─ sourceName
+       ├─ destCity
+       └─ vibes (JSON stringified)
+
+STEP 3: RESULTS PAGE LOAD
+  ResultsContent component useEffect triggers:
+    
+    A. GET SOURCE PLACE DETAILS
+       └─ Google Places getDetails() API
+          └─ Extract: rating, price_level, photos, editorial_summary
+    
+    B. GEOCODE DESTINATION CITY
+       └─ Google Geocoder
+          └─ Get: LatLng (center) + LatLngBounds (viewport)
+    
+    C. SEARCH FOR MATCHING CAFES
+       └─ searchCafes() function:
+          ├─ buildSearchKeywords() based on vibes
+          │  └─ Base: ["cafe", "coffee", "specialty coffee"]
+          │  └─ + vibe-specific keywords (roastery, light roast, etc.)
+          │
+          ├─ Google Places Text Search
+          │  └─ Query: keywords string
+          │  └─ Location: destination center
+          │  └─ Radius: calculated from city bounds (max 50km)
+          │  └─ Returns: ~20 results
+          │
+          ├─ Filter & Sort
+          │  ├─ Keep: must have place_id and rating > 0
+          │  ├─ Sort: by rating (descending)
+          │  └─ Take: top 6 candidates
+          │
+          ├─ Fetch Place Details (parallel)
+          │  └─ For each of 6 candidates:
+          │     └─ Get: name, rating, user_ratings_total, price_level,
+          │            geometry, opening_hours, photos[], types[], editorial_summary
+          │
+          ├─ Score Each Cafe (scoreCafe algorithm)
+          │  ├─ Rating:           (rating/5) * 10         (0-10 pts)
+          │  ├─ Review count:     log10(user_ratings)     (0-3 pts)
+          │  ├─ Price match:      ±1 from source          (2 pts)
+          │  ├─ Roastery:         keyword match           (2 pts)
+          │  ├─ Specialty:        keyword match           (1 pt)
+          │  ├─ Night owl:        has opening_hours       (1 pt)
+          │  ├─ Photos:           has photos[]            (0.5 pts)
+          │  └─ Laptop friendly:  type is "cafe"          (1 pt)
+          │
+          └─ Return Top 2 Matches (sorted by score)
+
+STEP 4: PARALLEL ENRICHMENT
+  For each of 2 matches in parallel with Promise.all() [3s timeout each]:
+    
+    A. REDDIT MENTIONS
+       └─ POST /api/reddit {cafeName, city}
+          ├─ Search reddit.com/search.json
+          ├─ Search 4 coffee subreddits (r/Coffee, r/cafe, r/espresso, r/specialty_coffee)
+          ├─ Sort by: 0.7*score + 0.3*recency
+          └─ Return: {posts: [], totalMentions, averageScore}
+             └─ Cached for 30 minutes
+    
+    B. IMAGE ANALYSIS
+       └─ POST /api/analyze-image {imageUrl}
+          ├─ Call OpenAI GPT-4o-mini with vision
+          ├─ Prompt: "Describe café style in 2-3 words"
+          ├─ Get: "minimalist, bright, industrial"
+          └─ Cached for 1 hour
+    
+    └─ Merge results into CafeMatch objects
+       └─ Add: redditData (or undefined), imageAnalysis (or undefined)
+
+STEP 5: LLM REASONING (Batch)
+  POST /api/reason-batch (with all 2 candidates + context)
+    ├─ Send: source café + candidates + Reddit/image data + vibes
+    ├─ Call: OpenAI GPT-4o-mini (temperature: 0.9 for variety)
+    ├─ System prompt: personality-rich, unique descriptions
+    ├─ Response: JSON array of 1-3 sentence descriptions
+    ├─ Get: ["Description 1...", "Description 2..."]
+    └─ Cached for 5 minutes
+
+STEP 6: ANALYTICS & RENDER
+  ├─ Track: analytics.resultsLoaded({candidate_count, latency_ms})
+  ├─ setResults() updates state
+  └─ Components render:
+     ├─ ResultsList (left side: scrollable cards)
+     ├─ ResultsMap (right side: Google Map)
+     └─ Synced via selectedIndex/hoveredIndex
+
+STEP 7: USER INTERACTION
+  User clicks a result card:
+    ├─ analytics.resultClick({rank, place_id})
+    ├─ setSelectedResult() and setSelectedIndex()
+    └─ DetailsDrawer appears:
+       ├─ Shows result details
+       ├─ Embedded Google Place card (native UI)
+       └─ User can save/call/directions/etc.
+
+
+4. AUTHENTICATION FLOW (GOOGLE OAUTH)
+================================================================================
+
+COMPONENTS INVOLVED:
+  - GoogleSignIn.tsx  (renders button, handles callback)
+  - Header.tsx        (shows user info, listens to auth changes)
+  - storage.ts        (persists user to localStorage)
+
+SIGN IN PROCESS:
+  1. GoogleSignIn component mounts
+     ├─ Loads script: accounts.google.com/gsi/client
+     ├─ Waits for onLoad callback
+     └─ Initializes with NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID
+  
+  2. Renders Google Sign-In button via window.google.accounts.id.renderButton()
+  
+  3. User clicks button
+     ├─ Google shows OAuth consent screen
+     └─ User grants permission
+  
+  4. handleCredentialResponse() callback fires
+     ├─ Receives JWT token
+     ├─ Decodes JWT client-side (base64 decode)
+     ├─ Extracts: sub, name, email, picture
+     ├─ Creates UserProfile object
+     ├─ storage.setUserProfile(userProfile)
+     │  └─ localStorage.setItem('elsebrew_user_profile', JSON.stringify(...))
+     ├─ window.dispatchEvent(new Event('elsebrew_auth_change'))
+     └─ onSignIn callback called
+
+  5. Header component listens to 'elsebrew_auth_change' event
+     ├─ storage.getUserProfile() retrieved from localStorage
+     ├─ setUser(profile) updates state
+     └─ Re-renders with user picture + name + "Sign out" button
+
+SIGN OUT PROCESS:
+  1. User clicks "Sign out" in Header
+  2. storage.setUserProfile(null)
+     └─ localStorage.removeItem('elsebrew_user_profile')
+  3. window.dispatchEvent(new Event('elsebrew_auth_change'))
+  4. Header component updates: setUser(null)
+  5. GoogleSignIn component re-mounted (signInKey incremented)
+
+KEY POINTS:
+  - No server-side session management (MVP)
+  - JWT NOT validated on server
+  - User data persisted in browser localStorage only
+  - Survives page refreshes but cleared on sign out
+
+
+5. CAFE SEARCH ALGORITHM
+================================================================================
+
+PURPOSE:
+  Match a user's favorite café with similar cafés in a destination city
+
+INPUTS:
+  - sourcePlace: PlaceBasicInfo (user's favorite café)
+  - destinationCenter: LatLng (city center)
+  - destinationBounds: LatLngBounds (city boundaries)
+  - vibes: VibeToggles (6 boolean preferences)
+
+PROCESS:
+
+A. KEYWORD GENERATION (buildSearchKeywords)
+   Base keywords: ["cafe", "coffee", "specialty coffee"]
+   
+   Conditional keywords based on vibes toggles:
+   - roastery: ["roastery", "roaster", "single origin"]
+   - lightRoast: ["light roast", "filter coffee", "hand drip", "pour over", "third wave"]
+   - laptopFriendly: ["co-working", "wifi", "workspace"]
+   - nightOwl: ["late night", "open late"]
+   - cozy: ["cozy", "intimate", "warm"]
+   - minimalist: ["minimalist", "modern", "clean"]
+   
+   Final query: First 5 keywords joined by space
+
+B. GOOGLE PLACES TEXT SEARCH
+   Request:
+     - query: keywords string
+     - location: destinationCenter (LatLng)
+     - radius: min(city_bounds_diagonal/2, 50km)
+   
+   Returns: ~20 results (Places.PlaceResult[])
+
+C. FILTERING & SORTING
+   Filter:
+     - Must have place_id
+     - Must have rating > 0
+   
+   Sort: By rating (descending)
+   Take: Top 6 candidates
+
+D. PLACE DETAILS FETCH (Parallel)
+   For each of 6 candidates, call Google Places getDetails():
+     Fields: place_id, name, rating, user_ratings_total, price_level,
+             formatted_address, geometry, opening_hours, photos[],
+             types[], editorial_summary
+
+E. SCORING ALGORITHM (scoreCafe)
+   For each candidate:
+     score = 0
+     
+     Components:
+     1. Rating Score:
+        score += (candidate.rating / 5) * 10
+        Range: 0-10 points (4.5★ = 9 pts)
+     
+     2. Review Count Bonus (log scale):
+        score += Math.log10(user_ratings_total)
+        Range: 0-3 points (100 reviews = 2 pts, 1000 = 3 pts)
+     
+     3. Price Level Match:
+        if |source.price - candidate.price| <= 1:
+          score += 2
+          matchedKeywords.push('Similar price')
+     
+     4. Roastery Keyword:
+        if vibes.roastery && (editorial.includes('roast') || types.includes('roaster')):
+          score += 2
+          matchedKeywords.push('Roastery')
+     
+     5. Specialty Coffee Indicators:
+        if editorial.includes('specialty') || editorial.includes('third wave'):
+          score += 1
+          matchedKeywords.push('Specialty coffee')
+     
+     6. Night Owl (Opening Hours):
+        if vibes.nightOwl && candidate.opening_hours:
+          score += 1
+          matchedKeywords.push('Extended hours')
+     
+     7. Photo Bonus:
+        if candidate.photos && candidate.photos.length > 0:
+          score += 0.5
+     
+     8. Laptop Friendly:
+        if vibes.laptopFriendly && types.includes('cafe'):
+          score += 1
+          matchedKeywords.push('Cafe setting')
+   
+   Example final score:
+     4.5★ (9) + 523 reviews (2.7) + price match (2) + roastery (2) + specialty (1) = 16.7 pts
+
+F. RANKING & SELECTION
+   Sort all 6 candidates by score (descending)
+   Return: Top 2 matches (reduced from 8 for speed)
+   
+   Each match includes:
+     - place: PlaceBasicInfo
+     - score: number
+     - matchedKeywords: string[]
+     - distanceToCenter: number (km)
+
+OUTPUTS:
+  CafeMatch[] with 2 items, ready for enrichment
+
+
+6. API ROUTES (BACKEND LOGIC)
+================================================================================
+
+ROUTE 1: POST /api/reason-batch
+PURPOSE: Generate personality-rich match explanations using LLM
+ACTIVE: Yes (replaces /api/reason for batch efficiency)
+
+REQUEST BODY:
+  {
+    source: {
+      name: string,
+      rating: number,
+      price_level: number
+    },
+    candidates: [
+      {
+        name: string,
+        rating: number,
+        user_ratings_total: number,
+        price_level: number,
+        editorial_summary: string,
+        keywords: string[],
+        redditData: RedditData (optional),
+        imageAnalysis: string (optional)
+      }
+    ],
+    city: string,
+    vibes: VibeToggles
+  }
+
+PROCESS:
+  1. Generate cache key: source.name + candidate names
+  2. Check 5-minute in-memory cache
+  3. If miss: Call OpenAI API
+  4. Send system prompt emphasizing:
+     - UNIQUE descriptions for each café
+     - Different opening phrases per café
+     - Vary emphasis (Reddit buzz, visual style, ratings, location, etc.)
+     - 2-3 sentences maximum
+     - Return JSON array
+  5. Send user prompt with:
+     - Source café details
+     - Each candidate's details
+     - Reddit data if available
+     - Image analysis if available
+     - User's vibe preferences
+  6. OpenAI responds with JSON array
+  7. Parse (handles multiple JSON formats)
+  8. Cache for 5 minutes
+  9. Return { reasonings: string[] }
+
+RESPONSE EXAMPLE:
+  {
+    "reasonings": [
+      "Minimalist third-wave spot with strong Reddit presence. Precision pour-overs and single-origin focus.",
+      "Bright, Instagram-worthy café favored by digital nomads. Excellent WiFi and laptop seating."
+    ]
+  }
+
+CACHING:
+  - Key: source name + candidate names
+  - TTL: 5 minutes
+  - Max entries: 100
+  - LRU cleanup when size exceeded
+
+
+ROUTE 2: POST /api/reddit
+PURPOSE: Find Reddit discussions about the café
+CACHING: 30 minutes
+
+REQUEST:
+  { cafeName: string, city: string }
+
+PROCESS:
+  1. Check 30-minute cache
+  2. Build search queries:
+     - "Café Mano Tokyo coffee"
+     - "Café Mano cafe Tokyo"
+  3. Fetch from reddit.com/search.json (public API, no auth)
+  4. Also search 4 coffee subreddits:
+     - r/Coffee, r/cafe, r/espresso, r/specialty_coffee
+  5. Aggregate all posts (up to 10 per query)
+  6. Sort by: 0.7 * score + 0.3 * recency
+  7. Keep top 10 posts
+
+RESPONSE:
+  {
+    posts: [
+      {
+        title: string,
+        body: string,
+        score: number,
+        author: string,
+        created_utc: number,
+        permalink: string,
+        subreddit: string
+      }
+    ],
+    totalMentions: number (total posts found),
+    averageScore: number
+  }
+
+CACHING:
+  - Key: cafeName:city
+  - TTL: 30 minutes
+  - Max entries: 100
+
+
+ROUTE 3: POST /api/analyze-image
+PURPOSE: Describe café visual aesthetic using GPT-4 Vision
+CACHING: 1 hour
+
+REQUEST:
+  { imageUrl: string }
+
+PROCESS:
+  1. Check 1-hour cache
+  2. Call OpenAI GPT-4o-mini with vision:
+     - Model: gpt-4o-mini (cost-efficient)
+     - Max tokens: 50 (short descriptions only)
+     - Prompt: "Describe this café's style in 2-3 words: minimalist, cozy, industrial, vintage, modern, rustic, bright, intimate, spacious, plant-filled, art-filled, etc."
+  3. Get analysis string
+
+RESPONSE:
+  { analysis: "minimalist, bright, industrial" }
+
+CACHING:
+  - Key: imageUrl
+  - TTL: 1 hour
+  - Max entries: 200
+
+
+ROUTE 4: POST /api/reason (DEPRECATED)
+PURPOSE: Single café explanation (replaced by reason-batch)
+STATUS: Not actively used
+
+
+7. STATE MANAGEMENT & STORAGE
+================================================================================
+
+ARCHITECTURE: Client-side only (no Redux, Context, or Zustand)
+
+localStorage (Browser Persistence):
+
+  elsebrew_user_profile (UserProfile)
+    {
+      sub: string,              // Google user ID
+      name: string,
+      email: string,
+      picture?: string          // Google profile photo URL
+    }
+    - Persists across page refreshes
+    - Cleared on sign out
+    - Accessed via: storage.setUserProfile() / getUserProfile()
+
+  elsebrew_saved_cafes (SavedCafe[])
+    [
+      {
+        placeId: string,
+        name: string,
+        savedAt: number,        // timestamp
+        photoUrl?: string,
+        rating?: number
+      }
+    ]
+    - Persists across sessions
+    - Can be cleared per café
+    - Methods: saveCafe() / removeSavedCafe() / getSavedCafes() / isCafeSaved()
+
+Component State (React):
+
+  Header.tsx
+    - user: UserProfile | null
+    - isClient: boolean (hydration guard)
+    - signInKey: number (force GoogleSignIn remount on logout)
+  
+  SearchPanel.tsx
+    - sourcePlace: google.maps.places.PlaceResult | null
+    - destPlace: google.maps.places.PlaceResult | null
+    - vibes: VibeToggles (6 booleans)
+    - isLoading: boolean
+    - isDropdownOpen: boolean
+  
+  ResultsContent.tsx (Results Page)
+    - results: CafeMatch[]
+    - isLoading: boolean
+    - error: string | null
+    - selectedResult: CafeMatch | null
+    - selectedIndex: number | null
+    - hoveredIndex: number | null
+    - mapCenter: google.maps.LatLngLiteral
+
+In-Memory Caching (Server-Side API Routes):
+
+  /api/reason-batch
+    Map<cacheKey, { reasonings: string[], timestamp: number }>
+    - TTL: 5 minutes
+    - Max: 100 entries
+    - Key: source name + candidate names
+  
+  /api/reddit
+    Map<cacheKey, { data: RedditData, timestamp: number }>
+    - TTL: 30 minutes
+    - Max: 100 entries
+    - Key: cafeName:city
+  
+  /api/analyze-image
+    Map<cacheKey, { analysis: string, timestamp: number }>
+    - TTL: 1 hour
+    - Max: 200 entries
+    - Key: imageUrl
+
+Data Flow for User Authentication:
+
+  User clicks GoogleSignIn button
+    ↓
+  JWT received in handleCredentialResponse()
+    ↓
+  Decode & extract user data
+    ↓
+  storage.setUserProfile() → localStorage
+    ↓
+  window.dispatchEvent('elsebrew_auth_change')
+    ↓
+  Header component listens, updates user state
+    ↓
+  UI re-renders with profile picture + name
+
+
+8. ENVIRONMENT VARIABLES & CONFIGURATION
+================================================================================
+
+REQUIRED:
+  NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+    - Enables: Places API, Geocoding API, Text Search, Embed
+    - Scope: Public (exposed to browser)
+    - Cost: ~$200/month credit in free tier
+
+  NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID
+    - Enables: Google Sign-In
+    - Scope: Public (used in browser)
+    - Cost: Free
+
+  OPENAI_API_KEY
+    - Enables: LLM reasoning, image analysis
+    - Scope: Server-side only (Next.js API routes)
+    - Cost: ~$0.0001-0.001 per search
+    - Model: gpt-4o-mini
+
+OPTIONAL:
+  NEXT_PUBLIC_GA4_MEASUREMENT_ID
+    - Enables: Google Analytics 4 tracking
+    - Scope: Public
+    - Cost: Free
+
+  NEXT_PUBLIC_BUYMEACOFFEE_URL
+    - Example: https://www.buymeacoffee.com/yourname
+    - Scope: Public
+    - Cost: Free
+
+  MAILCHIMP_FORM_ACTION
+    - Email signup form action URL
+    - Scope: Public
+    - Cost: Free
+    - Status: UI-only (no server-side processing)
+
+VALIDATION:
+  npm run check-env (check-env.js)
+    - Verifies required vars are set
+    - Checks for common typos
+
+
+9. DESIGN SYSTEM
+================================================================================
+
+COLOR PALETTE (Tailwind):
+  espresso
+    DEFAULT: #5B4636 (primary brown)
+    dark: #3D2E24 (darker variant)
+    light: #8B6F5E (lighter variant)
+  
+  offwhite: #FAFAF8 (background)
+  charcoal: #2D2D2D (text)
+
+CUSTOM COMPONENTS (globals.css):
+  .btn-primary
+    - Background: espresso
+    - Text: white
+    - Padding: px-6 py-3
+    - Border radius: rounded-2xl
+    - Hover: bg-espresso-dark shadow-lg
+    - Active: scale-95
+    - Disabled: opacity-50
+  
+  .btn-secondary
+    - Background: white
+    - Text: espresso
+    - Border: 2px espresso
+    - Hover: background inverts to espresso bg with white text
+  
+  .card
+    - Background: white
+    - Border radius: rounded-2xl
+    - Shadow: sm
+    - Hover: shadow-md
+  
+  .input-field
+    - Border: 1px gray-200
+    - Border radius: rounded-xl
+    - Focus: ring-2 ring-espresso
+    - Transition: all
+
+FONTS:
+  Serif: Georgia (headings)
+  Mono: System mono (code)
+  Default: System sans-serif (body)
+
+SPACING:
+  Generous whitespace throughout
+  Card padding: p-4 (1rem) to p-8 (2rem)
+  Grid gaps: 2rem (gap-8)
+  Button padding: py-3 px-6 (0.75rem vertical, 1.5rem horizontal)
+
+ANIMATIONS (Framer Motion):
+  Page entrance: opacity 0→1, y -20→0
+  Card list: staggered (50ms delay per card)
+  Hover: scale, shadow, ring
+  Drawer: slide from right, opacity fade
+  Dropdown: fade + translate
+
+RESPONSIVE:
+  Mobile-first design
+  Breakpoints: sm, md, lg via Tailwind
+  Search results: 1 column (mobile) → 2 columns (lg+)
+  Map hidden on mobile (shown on lg+ only)
+
+
+10. ANALYTICS & METRICS
+================================================================================
+
+TRACKING PLATFORMS:
+  - Google Analytics 4 (if GA4_MEASUREMENT_ID set)
+  - Plausible Analytics (fallback)
+
+EVENTS TRACKED:
+
+1. view_home
+   - When: Home page loads
+   - Params: none
+
+2. search_submit
+   - When: User submits search form
+   - Params: source_city, dest_city, toggles (vibe selections)
+
+3. results_loaded
+   - When: Search results fully loaded
+   - Params: candidate_count (number of results), latency_ms (duration)
+
+4. result_click
+   - When: User clicks a result
+   - Params: rank (1-2), place_id
+
+5. result_save_google
+   - When: User saves to Google Maps
+   - Params: place_id
+
+6. result_open_gmaps
+   - When: User opens in Google Maps app
+   - Params: place_id
+
+7. click_sign_in
+   - When: User signs in with Google
+   - Params: none
+
+8. email_subscribe_submit
+   - When: User enters email in signup
+   - Params: none
+
+9. buy_me_coffee_click
+   - When: User clicks support button
+   - Params: none
+
+10. cta_upgrade_click
+    - When: User clicks "Pro coming soon"
+    - Params: none
+
+FUNNEL ANALYSIS:
+  view_home → search_submit → results_loaded → result_click
+                                           ↓
+                              result_save_google or result_open_gmaps
+
+VALIDATION METRICS:
+  - Signup rate: email_subscribe_submit / view_home
+  - Willingness to pay: cta_upgrade_click / results_loaded
+  - Support: buy_me_coffee_click / view_home
+
+
+11. DEPLOYMENT (AWS AMPLIFY)
+================================================================================
+
+CONFIGURATION:
+  amplify.yml
+    - Auto-detects Next.js
+    - Runs: npm run build
+    - Output: .next/standalone (Docker-ready)
+    - Start: node .next/standalone/server.js
+
+BUILD PROCESS:
+  1. npm install
+  2. npm run build
+     - Compiles Next.js
+     - Generates standalone bundle
+  3. Output to .next/standalone/
+
+DEPLOYMENT:
+  1. Push to git
+  2. Amplify detects and triggers build
+  3. Sets environment variables in console
+  4. Deploys to global CDN
+  5. Auto-assigned URL: *.amplify.app
+
+IMAGE OPTIMIZATION:
+  - Domains: maps.googleapis.com, lh3.googleusercontent.com
+  - Optimized by Next.js Image component
+  - Max width: 400px (list), 800px (detail)
+
+PERFORMANCE TARGETS:
+  - First Contentful Paint: 1-2s
+  - Search latency: 5-10s (includes API calls)
+  - Results render: 1-2s
+
+
+12. SUMMARY: KEY ARCHITECTURAL DECISIONS
+================================================================================
+
+CLIENT-SIDE FIRST (MVP)
+  ✓ No backend database (no infrastructure cost)
+  ✓ localStorage for persistence
+  ✓ Faster iteration cycles
+  ✗ No cross-device sync
+  ✗ No user authentication security
+
+GOOGLE MAPS INTEGRATION
+  ✓ Official Places API (accurate data)
+  ✓ Text Search + Place Details (comprehensive)
+  ✓ Embed card for native "Save" button
+  ✗ API quota limits
+  ✗ Monthly costs (~$200 free tier)
+
+AI-POWERED MATCHING
+  ✓ OpenAI GPT-4o-mini (personality-rich explanations)
+  ✓ Reddit data (community validation)
+  ✓ Image analysis (visual vibe matching)
+  ✗ Variable costs ($0.0001-0.001 per search)
+  ✗ Hallucination risk (mitigated by prompts)
+
+SINGLETON MAPS LOADER
+  ✓ Single Google Maps API load
+  ✓ Reused promise across components
+  ✗ Cold start on first search
+
+IN-MEMORY CACHING
+  ✓ Fast responses (no database query)
+  ✓ Simple implementation
+  ✗ Lost on restart
+  ✗ Not distributed (single process)
+
+BATCH LLM REQUESTS
+  ✓ Better variety in descriptions
+  ✓ Lower API costs (single call vs multiple)
+  ✗ More complex prompt engineering
+
+ANALYTICS TRACKING
+  ✓ 10 events for validation
+  ✓ GA4 + Plausible (redundancy)
+  ✗ No user IDs (privacy by design)
+
+NEXTJS 14 APP ROUTER
+  ✓ Latest features and performance
+  ✓ API routes (serverless backend)
+  ✓ Image optimization built-in
+  ✓ Automatic code splitting
+  ✗ Less documentation than Pages Router
+
+TAILWIND + CUSTOM CLASSES
+  ✓ Rapid UI development
+  ✓ Consistent design system
+  ✓ Small bundle size
+  ✗ Learning curve
+
+
+CONCLUSION
+================================================================================
+
+Elsebrew is a well-architected MVP that:
+
+1. Focuses on rapid validation through minimal tech stack
+2. Leverages Google Maps for authoritative place data
+3. Uses AI (OpenAI + Reddit) to add personality to matches
+4. Tracks 10+ events to measure product-market fit
+5. Maintains clean separation of concerns (components, libs, API routes)
+6. Prepares for scaling with standalone Docker output
+7. Prioritizes user privacy (no database, localStorage only)
+8. Delivers premium UX with custom design system
+
+The codebase is production-ready for MVP validation and can be scaled with:
+- Supabase/Firebase backend
+- Stripe payments (Pro tier)
+- React Native mobile app
+- ML-based scoring (collaborative filtering)
+- Multi-language support
+
+Next steps if validation succeeds: backend database, persistent user accounts,
+advanced filters, and social features (sharing, reviews, etc.).
+

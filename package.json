@@ -7,11 +7,16 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "check-env": "node check-env.js"
+    "check-env": "node check-env.js",
+    "setup-db": "tsx scripts/create-dynamodb-tables.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.932.0",
+    "@aws-sdk/lib-dynamodb": "^3.932.0",
     "@googlemaps/js-api-loader": "^1.16.8",
+    "@types/jsonwebtoken": "^9.0.10",
     "framer-motion": "^11.11.17",
+    "jsonwebtoken": "^9.0.2",
     "next": "^14.2.33",
     "openai": "^4.73.0",
     "react": "^18.3.1",
@@ -23,10 +28,12 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
+    "dotenv": "^17.2.3",
     "eslint": "^8",
     "eslint-config-next": "14.2.18",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.20.6",
     "typescript": "^5"
   }
 }

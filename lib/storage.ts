@@ -3,6 +3,8 @@ import { SavedCafe, UserProfile } from '@/types';
 const STORAGE_KEYS = {
   USER_PROFILE: 'elsebrew_user_profile',
   SAVED_CAFES: 'elsebrew_saved_cafes',
+  NAVIGATION_STATE: 'elsebrew_navigation_state',
+  RESULTS_STATE: 'elsebrew_results_state',
 };
 
 export const storage = {
@@ -16,8 +18,14 @@ export const storage = {
   setUserProfile: (profile: UserProfile | null) => {
     if (typeof window === 'undefined') return;
     if (profile) {
+      console.log('[Storage] Setting user profile', {
+        name: profile.name,
+        hasToken: !!profile.token,
+        tokenLength: profile.token?.length,
+      });
       localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(profile));
     } else {
+      console.log('[Storage] Removing user profile');
       localStorage.removeItem(STORAGE_KEYS.USER_PROFILE);
     }
   },
@@ -51,4 +59,113 @@ export const storage = {
     const saved = storage.getSavedCafes();
     return saved.some(c => c.placeId === placeId);
   },
+
+  // Check if place is saved (from API or localStorage)
+  async isPlaceSaved(placeId: string): Promise<boolean> {
+    if (typeof window === 'undefined') return false;
+    
+    // Check localStorage first (fast)
+    if (storage.isCafeSaved(placeId)) {
+      return true;
+    }
+
+    // Check API if user is logged in
+    const userProfile = storage.getUserProfile();
+    if (userProfile?.token) {
+      try {
+        const response = await fetch('/api/user/saved-places', {
+          headers: {
+            'Authorization': `Bearer ${userProfile.token}`,
+          },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.places && Array.isArray(data.places)) {
+            const isSaved = data.places.some((p: any) => p.placeId === placeId);
+            // Cache in localStorage if found
+            if (isSaved) {
+              const place = data.places.find((p: any) => p.placeId === placeId);
+              if (place) {
+                storage.saveCafe({
+                  placeId: place.placeId,
+                  name: place.name,
+                  savedAt: new Date(place.savedAt).getTime(),
+                  photoUrl: place.photoUrl,
+                  rating: place.rating,
+                });
+              }
+            }
+            return isSaved;
+          }
+        }
+      } catch (error) {
+        console.error('Error checking saved place:', error);
+      }
+    }
+    
+    return false;
+  },
+
+  // Navigation state
+  getNavigationState: (): { previousRoute: string; searchParams?: string } | null => {
+    if (typeof window === 'undefined') return null;
+    const data = sessionStorage.getItem(STORAGE_KEYS.NAVIGATION_STATE);
+    return data ? JSON.parse(data) : null;
+  },
+
+  setNavigationState: (state: { previousRoute: string; searchParams?: string } | null) => {
+    if (typeof window === 'undefined') return;
+    if (state) {
+      sessionStorage.setItem(STORAGE_KEYS.NAVIGATION_STATE, JSON.stringify(state));
+    } else {
+      sessionStorage.removeItem(STORAGE_KEYS.NAVIGATION_STATE);
+    }
+  },
+
+  // Results state (for restoring results page)
+  getResultsState: (): { searchParams: string; results: any[]; mapCenter?: { lat: number; lng: number } } | null => {
+    if (typeof window === 'undefined') return null;
+    const data = sessionStorage.getItem(STORAGE_KEYS.RESULTS_STATE);
+    return data ? JSON.parse(data) : null;
+  },
+
+  setResultsState: (searchParams: string | null, results?: any[], mapCenter?: { lat: number; lng: number }) => {
+    if (typeof window === 'undefined') return;
+    if (searchParams && results) {
+      // Store simplified results (without Google Maps objects which aren't serializable)
+      const simplifiedResults = results.map(r => ({
+        place: {
+          place_id: r.place.place_id,
+          name: r.place.name,
+          formatted_address: r.place.formatted_address,
+          rating: r.place.rating,
+          user_ratings_total: r.place.user_ratings_total,
+          price_level: r.place.price_level,
+          types: r.place.types,
+          editorial_summary: r.place.editorial_summary,
+          photoUrl: r.place.photos?.[0]?.getUrl({ maxWidth: 400 }),
+        },
+        score: r.score,
+        reasoning: r.reasoning,
+        matchedKeywords: r.matchedKeywords,
+        distanceToCenter: r.distanceToCenter,
+        imageAnalysis: r.imageAnalysis,
+      }));
+      sessionStorage.setItem(STORAGE_KEYS.RESULTS_STATE, JSON.stringify({
+        searchParams,
+        results: simplifiedResults,
+        mapCenter: mapCenter || null,
+      }));
+    } else {
+      sessionStorage.removeItem(STORAGE_KEYS.RESULTS_STATE);
+    }
+  },
+};
+
+/**
+ * Get auth token from user profile
+ */
+export const getAuthToken = (): string | null => {
+  const profile = storage.getUserProfile();
+  return profile?.token || null;
 };

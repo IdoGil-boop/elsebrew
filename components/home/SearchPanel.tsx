@@ -13,8 +13,10 @@ export default function SearchPanel() {
   const destInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const [sourcePlace, setSourcePlace] = useState<google.maps.places.PlaceResult | null>(null);
+  const [sourcePlaces, setSourcePlaces] = useState<google.maps.places.PlaceResult[]>([]);
+  const [currentSourceInput, setCurrentSourceInput] = useState('');
   const [destPlace, setDestPlace] = useState<google.maps.places.PlaceResult | null>(null);
+  const [freeText, setFreeText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
@@ -42,7 +44,19 @@ export default function SearchPanel() {
 
         sourceAutocomplete.addListener('place_changed', () => {
           const place = sourceAutocomplete.getPlace();
-          setSourcePlace(place);
+          if (place && place.place_id) {
+            // Add to list if not already present
+            setSourcePlaces(prev => {
+              const exists = prev.some(p => p.place_id === place.place_id);
+              if (exists) return prev;
+              return [...prev, place];
+            });
+            // Clear input for next entry
+            if (sourceInputRef.current) {
+              sourceInputRef.current.value = '';
+            }
+            setCurrentSourceInput('');
+          }
         });
       }
 
@@ -81,9 +95,13 @@ export default function SearchPanel() {
 
   const selectedVibesCount = Object.values(vibes).filter(Boolean).length;
 
+  const removeSourcePlace = (placeId: string) => {
+    setSourcePlaces(prev => prev.filter(p => p.place_id !== placeId));
+  };
+
   const handleSearch = () => {
-    if (!sourcePlace || !sourcePlace.place_id || !destPlace || !destPlace.name) {
-      alert('Please select both a source café and a destination city');
+    if (sourcePlaces.length === 0 || !destPlace || !destPlace.name) {
+      alert('Please select at least one source café and a destination city');
       return;
     }
 
@@ -91,18 +109,24 @@ export default function SearchPanel() {
 
     // Track search
     analytics.searchSubmit({
-      source_city: sourcePlace.name || '',
+      source_city: sourcePlaces.map(p => p.name).join(', '),
       dest_city: destPlace.name || '',
       toggles: vibes,
+      multi_cafe: sourcePlaces.length > 1,
+      has_free_text: !!freeText,
     });
 
     // Navigate to results with query params
     const params = new URLSearchParams({
-      sourcePlaceId: sourcePlace.place_id,
-      sourceName: sourcePlace.name || '',
+      sourcePlaceIds: JSON.stringify(sourcePlaces.map(p => p.place_id)),
+      sourceNames: JSON.stringify(sourcePlaces.map(p => p.name || '')),
       destCity: destPlace.name || '',
       vibes: JSON.stringify(vibes),
     });
+
+    if (freeText.trim()) {
+      params.append('freeText', freeText.trim());
+    }
 
     router.push(`/results?${params.toString()}`);
   };
@@ -124,10 +148,13 @@ export default function SearchPanel() {
       className="card p-8 max-w-2xl mx-auto"
     >
       <div className="space-y-6">
-        {/* Source café */}
+        {/* Source café(s) */}
         <div>
           <label htmlFor="source" className="block text-sm font-medium text-charcoal mb-2">
-            Your favorite café
+            Your favorite café(s)
+            <span className="text-xs text-gray-500 ml-2 font-normal">
+              You can add multiple cafes to find places that match all of them
+            </span>
           </label>
           <input
             ref={sourceInputRef}
@@ -135,7 +162,35 @@ export default function SearchPanel() {
             type="text"
             placeholder="e.g., Cafelix, Florentin, Tel Aviv"
             className="input-field"
+            value={currentSourceInput}
+            onChange={(e) => setCurrentSourceInput(e.target.value)}
           />
+
+          {/* Selected cafes */}
+          {sourcePlaces.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {sourcePlaces.map((place) => (
+                <motion.div
+                  key={place.place_id}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-espresso/10 text-espresso rounded-full text-sm"
+                >
+                  <span>{place.name}</span>
+                  <button
+                    onClick={() => removeSourcePlace(place.place_id!)}
+                    className="hover:bg-espresso/20 rounded-full p-0.5 transition-colors"
+                    aria-label="Remove cafe"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Destination */}
@@ -199,6 +254,24 @@ export default function SearchPanel() {
               ))}
             </motion.div>
           )}
+        </div>
+
+        {/* Free text for additional preferences */}
+        <div>
+          <label htmlFor="freeText" className="block text-sm font-medium text-charcoal mb-2">
+            Additional preferences (optional)
+            <span className="text-xs text-gray-500 ml-2 font-normal">
+              e.g., &quot;great pastries&quot;, &quot;outdoor seating&quot;, &quot;quiet atmosphere&quot;
+            </span>
+          </label>
+          <textarea
+            id="freeText"
+            value={freeText}
+            onChange={(e) => setFreeText(e.target.value)}
+            placeholder="Describe any other qualities you're looking for..."
+            className="input-field min-h-[80px] resize-none"
+            rows={3}
+          />
         </div>
 
         {/* Search button */}

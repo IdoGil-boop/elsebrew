@@ -3,6 +3,8 @@
 import { CafeMatch } from '@/types';
 import { motion } from 'framer-motion';
 import { analytics } from '@/lib/analytics';
+import { useState, useEffect } from 'react';
+import { storage } from '@/lib/storage';
 
 interface ResultsListProps {
   results: CafeMatch[];
@@ -19,7 +21,28 @@ export default function ResultsList({
   hoveredIndex,
   onHover,
 }: ResultsListProps) {
+  const [savedPlaceIds, setSavedPlaceIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    // Check saved status for all results
+    const checkSaved = async () => {
+      const saved = new Set<string>();
+      for (const result of results) {
+        const isSaved = await storage.isPlaceSaved(result.place.place_id);
+        if (isSaved) {
+          saved.add(result.place.place_id);
+        }
+      }
+      setSavedPlaceIds(saved);
+    };
+    checkSaved();
+  }, [results]);
   const getPhotoUrl = (place: CafeMatch['place']) => {
+    // Check for cached photoUrl first (from restored results)
+    if (place.photoUrl) {
+      return place.photoUrl;
+    }
+    // Otherwise use Google Maps photos
     if (place.photos && place.photos.length > 0) {
       return place.photos[0].getUrl({ maxWidth: 400 });
     }
@@ -32,7 +55,7 @@ export default function ResultsList({
   };
 
   return (
-    <div className="space-y-4 overflow-y-auto overflow-x-visible h-full pr-2">
+    <div className="space-y-4 overflow-y-auto overflow-x-visible h-full px-6 py-6">
       {results.map((result, index) => {
         const isSelected = selectedIndex === index;
         const isHovered = hoveredIndex === index;
@@ -73,9 +96,18 @@ export default function ResultsList({
               {/* Content */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between mb-1">
-                  <h3 className="font-semibold text-lg truncate pr-2">
-                    {index + 1}. {result.place.name}
-                  </h3>
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <h3 className="font-semibold text-lg truncate">
+                      {index + 1}. {result.place.name}
+                    </h3>
+                    {savedPlaceIds.has(result.place.place_id) && (
+                      <span className="flex-shrink-0 text-espresso" title="Saved">
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                        </svg>
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center space-x-2 flex-shrink-0">
                     {result.place.rating && (
                       <div className="flex items-center space-x-1">
@@ -119,24 +151,11 @@ export default function ResultsList({
                 )}
 
                 {/* Additional info badges */}
-                {(result.imageAnalysis || (result.redditData && result.redditData.totalMentions > 0)) && (
+                {result.imageAnalysis && (
                   <div className="flex flex-wrap gap-2 mb-2">
-                    {result.imageAnalysis && (
-                      <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full">
-                        {result.imageAnalysis}
-                      </span>
-                    )}
-                    {result.redditData && result.redditData.totalMentions > 0 && result.redditData.posts.length > 0 && (
-                      <a
-                        href={result.redditData.posts[0].permalink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs px-2 py-1 bg-orange-100 text-orange-700 rounded-full hover:bg-orange-200 transition-colors"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {result.redditData.totalMentions} Reddit mention{result.redditData.totalMentions !== 1 ? 's' : ''} →
-                      </a>
-                    )}
+                    <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full">
+                      {result.imageAnalysis}
+                    </span>
                   </div>
                 )}
 

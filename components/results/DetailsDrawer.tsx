@@ -13,11 +13,18 @@ interface DetailsDrawerProps {
 
 export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
   const [isSaved, setIsSaved] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    if (result) {
-      setIsSaved(storage.isCafeSaved(result.place.place_id));
-    }
+    const checkSaved = async () => {
+      if (result) {
+        setIsChecking(true);
+        const saved = await storage.isPlaceSaved(result.place.place_id);
+        setIsSaved(saved);
+        setIsChecking(false);
+      }
+    };
+    checkSaved();
   }, [result]);
 
   if (!result) return null;
@@ -25,6 +32,11 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
   const { place, matchedKeywords, reasoning } = result;
 
   const getPhotoUrl = () => {
+    // Check for cached photoUrl first (from restored results)
+    if (place.photoUrl) {
+      return place.photoUrl;
+    }
+    // Otherwise use Google Maps photos
     if (place.photos && place.photos.length > 0) {
       return place.photos[0].getUrl({ maxWidth: 800 });
     }
@@ -40,20 +52,87 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
     return `https://www.google.com/maps/search/?api=1&query=Google&query_place_id=${place.place_id}`;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (isSaved) return; // Already saved, do nothing
+    
     const photoUrl = getPhotoUrl();
-    storage.saveCafe({
-      placeId: place.place_id,
-      name: place.name,
-      savedAt: Date.now(),
-      photoUrl: photoUrl || undefined,
-      rating: place.rating,
-    });
+    const userProfile = storage.getUserProfile();
+    
+    // Save to API if logged in
+    if (userProfile?.token) {
+      try {
+        const response = await fetch('/api/user/saved-places', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${userProfile.token}`,
+          },
+          body: JSON.stringify({
+            placeId: place.place_id,
+            name: place.name,
+            address: place.formatted_address || '',
+            rating: place.rating,
+            priceLevel: place.price_level,
+            photoUrl: photoUrl || undefined,
+          }),
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.localStorage) {
+            // Also save to localStorage if AWS not configured
+            storage.saveCafe({
+              placeId: place.place_id,
+              name: place.name,
+              savedAt: Date.now(),
+              photoUrl: photoUrl || undefined,
+              rating: place.rating,
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error saving place:', error);
+        // Fallback to localStorage
+        storage.saveCafe({
+          placeId: place.place_id,
+          name: place.name,
+          savedAt: Date.now(),
+          photoUrl: photoUrl || undefined,
+          rating: place.rating,
+        });
+      }
+    } else {
+      // Not logged in, save to localStorage only
+      storage.saveCafe({
+        placeId: place.place_id,
+        name: place.name,
+        savedAt: Date.now(),
+        photoUrl: photoUrl || undefined,
+        rating: place.rating,
+      });
+    }
+    
     setIsSaved(true);
   };
 
-  const handleUnsave = () => {
+  const handleUnsave = async () => {
     storage.removeSavedCafe(place.place_id);
+    
+    // Also remove from API if logged in
+    const userProfile = storage.getUserProfile();
+    if (userProfile?.token) {
+      try {
+        await fetch(`/api/user/saved-places?placeId=${place.place_id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${userProfile.token}`,
+          },
+        });
+      } catch (error) {
+        console.error('Error deleting from API:', error);
+      }
+    }
+    
     setIsSaved(false);
   };
 
@@ -209,7 +288,11 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
               <button onClick={handleOpenInMaps} className="btn-primary">
                 Open in Google Maps
               </button>
-              {isSaved ? (
+              {isChecking ? (
+                <button disabled className="btn-secondary opacity-50 cursor-not-allowed">
+                  Checking...
+                </button>
+              ) : isSaved ? (
                 <button onClick={handleUnsave} className="btn-secondary">
                   ✓ Saved
                 </button>

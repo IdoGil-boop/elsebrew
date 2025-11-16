@@ -6,10 +6,12 @@ export const searchCafes = async (
   sourcePlace: PlaceBasicInfo,
   destinationCenter: google.maps.LatLng,
   destinationBounds: google.maps.LatLngBounds,
-  vibes: VibeToggles
+  vibes: VibeToggles,
+  customKeywords?: string[], // Optional custom keywords from multi-cafe + free text
+  isRefinement: boolean = false // Flag to prioritize refinement keywords
 ): Promise<CafeMatch[]> => {
   const google = googleMaps;
-  const keywords = buildSearchKeywords(sourcePlace, vibes);
+  const keywords = customKeywords || buildSearchKeywords(sourcePlace, vibes);
   const query = keywords.slice(0, 5).join(' '); // Limit query length
 
   // Calculate search radius from bounds
@@ -34,9 +36,21 @@ export const searchCafes = async (
         return;
       }
 
-      // Get top candidates by rating
+      // Filter results to only include places within destination bounds
       const candidates = results
-        .filter((place: any) => place.place_id && place.rating)
+        .filter((place: any) => {
+          if (!place.place_id || !place.rating) return false;
+          
+          // Check if place is within destination bounds
+          if (place.geometry?.location) {
+            const lat = place.geometry.location.lat();
+            const lng = place.geometry.location.lng();
+            return destinationBounds.contains(new google.maps.LatLng(lat, lng));
+          }
+          
+          // If no geometry, include it (will be filtered later when we get details)
+          return true;
+        })
         .sort((a: any, b: any) => (b.rating || 0) - (a.rating || 0))
         .slice(0, 6); // Reduced from 30 to 6
 
@@ -47,11 +61,22 @@ export const searchCafes = async (
         )
       );
 
-      // Score and sort
+      // Score and sort, filtering by bounds again with full geometry
       const scored: CafeMatch[] = detailedCandidates
-        .filter((place): place is PlaceBasicInfo => place !== null)
+        .filter((place): place is PlaceBasicInfo => {
+          if (!place) return false;
+          
+          // Double-check bounds with full geometry
+          if (place.geometry?.location) {
+            const lat = place.geometry.location.lat();
+            const lng = place.geometry.location.lng();
+            return destinationBounds.contains(new google.maps.LatLng(lat, lng));
+          }
+          
+          return false; // Exclude if no geometry
+        })
         .map(place => {
-          const { score, matchedKeywords } = scoreCafe(place, sourcePlace, vibes, keywords);
+          const { score, matchedKeywords } = scoreCafe(place, sourcePlace, vibes, keywords, isRefinement);
           const distanceToCenter = place.geometry?.location
             ? calculateDistance(destinationCenter, place.geometry.location)
             : undefined;

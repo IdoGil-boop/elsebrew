@@ -12,18 +12,31 @@ export default function Header() {
   const [signInKey, setSignInKey] = useState(0); // Force re-render of GoogleSignIn
 
   useEffect(() => {
+    console.log('[Header] Component mounted');
     setIsClient(true);
     const profile = storage.getUserProfile();
+    console.log('[Header] Initial profile:', profile?.name || 'null');
     setUser(profile);
 
     // Listen for auth changes
     const handleAuthChange = () => {
+      console.log('[Header] Auth change event received');
       const updatedProfile = storage.getUserProfile();
+      console.log('[Header] Updated profile:', {
+        name: updatedProfile?.name || 'null',
+        hasToken: !!updatedProfile?.token,
+        tokenLength: updatedProfile?.token?.length,
+      });
       setUser(updatedProfile);
 
       // Force re-mount of GoogleSignIn component when user signs out
       if (!updatedProfile) {
-        setSignInKey(prev => prev + 1);
+        console.log('[Header] User signed out, incrementing signInKey');
+        setSignInKey(prev => {
+          const newKey = prev + 1;
+          console.log('[Header] New signInKey:', newKey);
+          return newKey;
+        });
       }
     };
 
@@ -32,8 +45,10 @@ export default function Header() {
   }, []);
 
   const handleSignOut = () => {
+    console.log('[Header] Sign out clicked');
     storage.setUserProfile(null);
     setUser(null);
+    console.log('[Header] Dispatching auth change event');
     window.dispatchEvent(new Event('elsebrew_auth_change'));
   };
 
@@ -72,6 +87,22 @@ export default function Header() {
           <nav className="flex items-center space-x-6">
             <Link
               href="/saved"
+              onClick={() => {
+                // Store navigation state when clicking saved link
+                const currentPath = window.location.pathname;
+                const currentSearch = window.location.search;
+                if (currentPath === '/results' && currentSearch) {
+                  storage.setNavigationState({
+                    previousRoute: '/results',
+                    searchParams: currentSearch,
+                  });
+                  // Results will be stored by the results page when navigating away
+                } else if (currentPath === '/') {
+                  storage.setNavigationState({
+                    previousRoute: '/',
+                  });
+                }
+              }}
               className="text-sm text-charcoal hover:text-espresso transition-colors"
             >
               Saved
@@ -104,7 +135,20 @@ export default function Header() {
                 </button>
               </div>
             ) : (
-              <GoogleSignIn key={signInKey} onSignIn={setUser} />
+              <>
+                {console.log('[Header] Rendering GoogleSignIn with key:', signInKey)}
+                <GoogleSignIn
+                  key={signInKey}
+                  onSignIn={(profile) => {
+                    console.log('[Header] onSignIn callback received:', {
+                      name: profile.name,
+                      hasToken: !!profile.token,
+                      tokenLength: profile.token?.length,
+                    });
+                    setUser(profile);
+                  }}
+                />
+              </>
             )}
           </nav>
         </div>

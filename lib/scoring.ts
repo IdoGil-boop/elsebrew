@@ -41,7 +41,8 @@ export const scoreCafe = (
   candidate: PlaceBasicInfo,
   source: PlaceBasicInfo,
   vibes: VibeToggles,
-  keywords: string[]
+  keywords: string[],
+  isRefinement: boolean = false
 ): { score: number; matchedKeywords: string[] } => {
   let score = 0;
   const matchedKeywords: string[] = [];
@@ -101,6 +102,23 @@ export const scoreCafe = (
     ['cafe', 'coffee_shop'].includes(t))) {
     score += 1;
     matchedKeywords.push('Cafe setting');
+  }
+
+  // If this is a refinement, prioritize keywords from free text and vibes
+  if (isRefinement) {
+    const editorialText = candidate.editorial_summary?.toLowerCase() || '';
+    const typesText = candidate.types?.join(' ').toLowerCase() || '';
+    const combinedText = `${editorialText} ${typesText}`;
+    
+    // Boost score for matching refinement keywords (from free text and vibes)
+    keywords.forEach(keyword => {
+      if (combinedText.includes(keyword.toLowerCase())) {
+        score += 3; // Higher weight for refinement matches
+        if (!matchedKeywords.includes(keyword)) {
+          matchedKeywords.push(keyword);
+        }
+      }
+    });
   }
 
   return { score, matchedKeywords };

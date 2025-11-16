@@ -26,6 +26,7 @@ export interface PlaceBasicInfo {
   price_level?: number;
   opening_hours?: google.maps.places.PlaceOpeningHours;
   photos?: google.maps.places.PlacePhoto[];
+  photoUrl?: string; // Cached photo URL for restored results
   editorial_summary?: string;
 }
 
@@ -60,6 +61,7 @@ export interface UserProfile {
   name: string;
   email: string;
   picture?: string;
+  token?: string; // JWT token for authentication
 }
 
 export interface SavedCafe {

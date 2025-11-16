@@ -25,14 +25,14 @@ export default function Home() {
         <TypingTitle />
       </motion.div>
 
-      {/* Pricing Strip */}
-      <div className="mb-8">
-        <PricingStrip />
-      </div>
-
       {/* Search Panel */}
       <div className="mb-12">
         <SearchPanel />
+      </div>
+
+      {/* Pricing Strip */}
+      <div className="mb-8">
+        <PricingStrip />
       </div>
 
       {/* Email Signup */}

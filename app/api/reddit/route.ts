@@ -14,16 +14,50 @@ interface RedditPost {
   subreddit: string;
 }
 
+/**
+ * Check if a post actually mentions the cafe name
+ */
+function postMentionsCafe(post: any, cafeName: string): boolean {
+  const isDev = process.env.NODE_ENV === 'development';
+  const title = (post.title || '').toLowerCase();
+  const body = (post.selftext || '').toLowerCase();
+  const cafeNameLower = cafeName.toLowerCase();
+
+  // Extract main cafe name (remove location/descriptor words)
+  const cafeWords = cafeNameLower.split(' ').filter(word =>
+    word.length > 2 && // Ignore short words
+    !['cafe', 'coffee', 'roasters', 'the', 'and', 'at'].includes(word)
+  );
+
+  // Must contain at least one significant word from the cafe name
+  const hasCafeName = cafeWords.some(word =>
+    title.includes(word) || body.includes(word)
+  );
+
+  if (isDev && !hasCafeName) {
+    console.log(`🔗 [REDDIT] Filtered out post (no cafe mention):`, { title: post.title, cafeName });
+  }
+
+  return hasCafeName;
+}
+
 export async function POST(request: NextRequest) {
+  const isDev = process.env.NODE_ENV === 'development';
+
   try {
     const body = await request.json();
     const { cafeName, city } = body;
+
+    if (isDev) {
+      console.log('🔗 [REDDIT] Searching for:', { cafeName, city });
+    }
 
     // Generate cache key
     const cacheKey = `${cafeName}:${city}`;
     const cached = cache.get(cacheKey);
 
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      if (isDev) console.log('🔗 [REDDIT] Using cached result');
       return NextResponse.json(cached.data);
     }
 
@@ -52,7 +86,8 @@ export async function POST(request: NextRequest) {
 
           posts.forEach((post: any) => {
             const postData = post.data;
-            if (postData.selftext || postData.title) {
+            // Only include posts that actually mention the cafe
+            if ((postData.selftext || postData.title) && postMentionsCafe(postData, cafeName)) {
               allPosts.push({
                 title: postData.title,
                 body: postData.selftext || '',
@@ -89,7 +124,8 @@ export async function POST(request: NextRequest) {
 
           posts.forEach((post: any) => {
             const postData = post.data;
-            if (postData.selftext || postData.title) {
+            // Only include posts that actually mention the cafe
+            if ((postData.selftext || postData.title) && postMentionsCafe(postData, cafeName)) {
               allPosts.push({
                 title: postData.title,
                 body: postData.selftext || '',
@@ -125,6 +161,15 @@ export async function POST(request: NextRequest) {
         ? allPosts.reduce((sum, post) => sum + post.score, 0) / allPosts.length
         : 0,
     };
+
+    if (isDev) {
+      console.log('🔗 [REDDIT] Found posts:', {
+        total: allPosts.length,
+        returning: result.posts.length,
+        avgScore: result.averageScore.toFixed(1),
+        topPost: result.posts[0]?.title,
+      });
+    }
 
     // Cache the result
     cache.set(cacheKey, { data: result, timestamp: Date.now() });
