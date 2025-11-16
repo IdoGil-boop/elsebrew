@@ -1,0 +1,127 @@
+elsebrew/
+│
+├── 📚 Documentation
+│   ├── README.md                    ⭐ Start here - Complete documentation
+│   ├── QUICKSTART.md                🚀 10-minute setup guide
+│   ├── SETUP_GUIDE.md               🔧 Detailed API key setup
+│   ├── PROJECT_SUMMARY.md           📊 What was built + overview
+│   ├── ARCHITECTURE.md              🏗️  Technical architecture
+│   ├── CHECKLIST.md                 ✅ Launch checklist
+│   ├── DOCS_INDEX.md                🗂️  Documentation navigation
+│   ├── FILE_TREE.txt                📁 This file
+│   └── LICENSE                      ⚖️  MIT License
+│
+├── ⚙️  Configuration
+│   ├── .env.example                 📝 Environment template
+│   ├── .env.local                   🔐 Your API keys (git-ignored)
+│   ├── .gitignore                   🚫 Git ignore rules
+│   ├── next.config.js               ⚡ Next.js config
+│   ├── tailwind.config.ts           🎨 Tailwind config
+│   ├── tsconfig.json                📘 TypeScript config
+│   ├── postcss.config.mjs           🔧 PostCSS config
+│   ├── package.json                 📦 Dependencies & scripts
+│   └── check-env.js                 ✓  Environment validator
+│
+├── 📱 App (Next.js 14 App Router)
+│   ├── layout.tsx                   🏠 Root layout
+│   ├── page.tsx                     🏠 Home page
+│   ├── globals.css                  🎨 Global styles
+│   │
+│   ├── results/
+│   │   └── page.tsx                 🗺️  Search results page
+│   │
+│   ├── saved/
+│   │   └── page.tsx                 ❤️  Saved cafés page
+│   │
+│   ├── about/
+│   │   └── page.tsx                 ℹ️  About page
+│   │
+│   ├── privacy/
+│   │   └── page.tsx                 🔒 Privacy policy
+│   │
+│   ├── terms/
+│   │   └── page.tsx                 📜 Terms of service
+│   │
+│   └── api/
+│       └── reason/
+│           └── route.ts             🤖 LLM reasoning API
+│
+├── 🧩 Components
+│   ├── home/
+│   │   ├── SearchPanel.tsx          🔍 Main search UI
+│   │   ├── EmailSignup.tsx          ✉️  Email capture
+│   │   └── PricingStrip.tsx         💰 Pricing display
+│   │
+│   ├── results/
+│   │   ├── ResultsList.tsx          📋 Results list
+│   │   ├── ResultsMap.tsx           🗺️  Interactive map
+│   │   └── DetailsDrawer.tsx        📄 Details modal
+│   │
+│   ├── shared/
+│   │   ├── Header.tsx               🎯 Site header
+│   │   ├── Footer.tsx               👣 Site footer
+│   │   └── AnalyticsProvider.tsx   📊 Analytics wrapper
+│   │
+│   └── auth/
+│       └── GoogleSignIn.tsx         🔐 Google OAuth
+│
+├── 🛠️  Utilities (lib/)
+│   ├── analytics.ts                 📈 Event tracking
+│   ├── maps-loader.ts               🗺️  Google Maps loader
+│   ├── places-search.ts             🔎 Café search logic
+│   ├── scoring.ts                   🎯 Scoring algorithm
+│   └── storage.ts                   💾 localStorage helpers
+│
+├── 📐 Types
+│   └── types/index.ts               📘 TypeScript definitions
+│
+└── 📦 Build Artifacts (git-ignored)
+    ├── node_modules/                📚 Dependencies
+    ├── .next/                       ⚡ Next.js build
+    └── package-lock.json            🔒 Dependency lock
+
+════════════════════════════════════════════════════════════════
+
+Key Features Implemented:
+✅ Google Places Autocomplete (source + destination)
+✅ Real Google Maps search results
+✅ Interactive map with numbered markers
+✅ Custom scoring algorithm
+✅ LLM-generated match explanations (OpenAI)
+✅ Google Sign-In (OAuth)
+✅ Saved cafés (localStorage)
+✅ Analytics tracking (GA4/Plausible)
+✅ Email signup (Mailchimp-ready)
+✅ Buy Me A Coffee integration
+✅ Premium design (no default Tailwind vibes)
+✅ Framer Motion animations
+✅ Responsive (desktop + mobile)
+✅ SEO-friendly (Next.js 14 App Router)
+✅ Privacy Policy + Terms of Service
+✅ Google Maps ToS compliant
+
+════════════════════════════════════════════════════════════════
+
+API Keys Required:
+1. Google Maps API Key          (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY)
+2. Google OAuth Client ID       (NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID)
+3. OpenAI API Key              (OPENAI_API_KEY)
+
+Optional:
+4. Google Analytics 4          (NEXT_PUBLIC_GA4_MEASUREMENT_ID)
+5. Buy Me A Coffee URL         (NEXT_PUBLIC_BUYMEACOFFEE_URL)
+6. Mailchimp Form Action       (MAILCHIMP_FORM_ACTION)
+
+════════════════════════════════════════════════════════════════
+
+Quick Start:
+1. npm install
+2. cp .env.example .env.local
+3. Edit .env.local with your API keys
+4. npm run check-env
+5. npm run dev
+6. Open http://localhost:3000
+
+See QUICKSTART.md for detailed steps.
+
+════════════════════════════════════════════════════════════════
