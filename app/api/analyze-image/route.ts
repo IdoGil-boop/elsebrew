@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialization of OpenAI client to avoid build-time errors
+let openai: OpenAI | null = null;
+function getOpenAIClient() {
+  if (!openai) {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return openai;
+}
 
 // Simple in-memory cache (expires after 1 hour)
 const cache = new Map<string, { analysis: string; timestamp: number }>();
@@ -28,7 +35,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Analyze the image with GPT-4 Vision
-    const response = await openai.chat.completions.create({
+    const client = getOpenAIClient();
+    const response = await client.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {

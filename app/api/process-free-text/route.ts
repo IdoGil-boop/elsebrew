@@ -3,10 +3,17 @@ import OpenAI from 'openai';
 
 export const runtime = 'nodejs';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || process.env.LLM_API_KEY,
-  baseURL: process.env.LLM_API_URL,
-});
+// Lazy initialization of OpenAI client to avoid build-time errors
+let openai: OpenAI | null = null;
+function getOpenAIClient() {
+  if (!openai) {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY || process.env.LLM_API_KEY,
+      baseURL: process.env.LLM_API_URL,
+    });
+  }
+  return openai;
+}
 
 export async function POST(request: NextRequest) {
   const isDev = process.env.NODE_ENV === 'development';
@@ -23,9 +30,10 @@ export async function POST(request: NextRequest) {
     }
 
     const startTime = Date.now();
+    const client = getOpenAIClient();
 
     // First, detect language and translate to English if needed
-    const detectAndTranslate = await openai.chat.completions.create({
+    const detectAndTranslate = await client.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
@@ -52,7 +60,7 @@ Return ONLY the translated/English text, nothing else.`,
     }
 
     // Use OpenAI to extract search keywords from translated free text
-    const completion = await openai.chat.completions.create({
+    const completion = await client.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {

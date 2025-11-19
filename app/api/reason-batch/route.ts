@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialization of OpenAI client to avoid build-time errors
+let openai: OpenAI | null = null;
+function getOpenAIClient() {
+  if (!openai) {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return openai;
+}
 
 // Simple in-memory cache (expires after 5 minutes)
 const cache = new Map<string, { reasonings: string[]; timestamp: number }>();
@@ -162,7 +169,8 @@ ${candidatesText}
 Return a JSON array of ${candidates.length} strings, where each string is a complete, unique description. Make each one DIFFERENT from the others.`;
 
     // Call OpenAI API
-    const completion = await openai.chat.completions.create({
+    const client = getOpenAIClient();
+    const completion = await client.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
