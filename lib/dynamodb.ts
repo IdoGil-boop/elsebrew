@@ -9,19 +9,28 @@ let credentialsCache: { accessKeyId: string; secretAccessKey: string; region: st
 let initializationPromise: Promise<void> | null = null;
 
 function getCredentials(): { accessKeyId: string; secretAccessKey: string; region: string } {
-  // Use cached credentials if available
-  if (credentialsCache) {
-    return credentialsCache;
-  }
-
-  // Get credentials from environment variables
-  // Use DYNAMODB_ prefix to avoid conflicts with AWS SDK's reserved AWS_ prefix
+  // Always check fresh from env vars (don't rely on cache if we're retrying)
   const accessKeyId = process.env.DYNAMODB_ACCESS_KEY_ID;
   const secretAccessKey = process.env.DYNAMODB_SECRET_ACCESS_KEY;
   const region = process.env.DYNAMODB_REGION || 'us-east-1';
 
+  // Log what we found for debugging
+  logger.debug('[DynamoDB] Checking credentials', {
+    hasAccessKey: !!accessKeyId,
+    hasSecretKey: !!secretAccessKey,
+    hasRegion: !!region,
+    accessKeyPrefix: accessKeyId ? accessKeyId.substring(0, 8) + '...' : 'MISSING',
+    allEnvKeys: Object.keys(process.env).filter(k => k.includes('DYNAMODB')).join(', '),
+  });
+
   if (!accessKeyId || !secretAccessKey) {
-    throw new Error('AWS credentials not configured. Set DYNAMODB_ACCESS_KEY_ID and DYNAMODB_SECRET_ACCESS_KEY environment variables.');
+    const error = new Error('AWS credentials not configured. Set DYNAMODB_ACCESS_KEY_ID and DYNAMODB_SECRET_ACCESS_KEY environment variables.');
+    logger.error('[DynamoDB] Credentials check failed', {
+      hasAccessKey: !!accessKeyId,
+      hasSecretKey: !!secretAccessKey,
+      availableEnvVars: Object.keys(process.env).filter(k => k.startsWith('DYNAMODB_')),
+    });
+    throw error;
   }
 
   // Validate credentials format
@@ -29,15 +38,13 @@ function getCredentials(): { accessKeyId: string; secretAccessKey: string; regio
     throw new Error('Invalid DYNAMODB_ACCESS_KEY_ID format. It should start with AKIA or ASIA.');
   }
 
-  logger.debug('[DynamoDB] Using credentials from environment variables', {
-    hasAccessKey: !!accessKeyId,
-    hasSecretKey: !!secretAccessKey,
+  // Cache for future use
+  credentialsCache = { accessKeyId, secretAccessKey, region };
+  logger.debug('[DynamoDB] Credentials validated and cached', {
     region,
     accessKeyPrefix: accessKeyId.substring(0, 8) + '...',
   });
 
-  // Cache for future use
-  credentialsCache = { accessKeyId, secretAccessKey, region };
   return credentialsCache;
 }
 
@@ -71,9 +78,11 @@ export async function initializeDynamoDB(): Promise<void> {
       });
 
       dynamoDB = DynamoDBDocumentClient.from(client);
+      initializationError = null; // Clear any previous errors
       logger.debug('[DynamoDB] Client initialized successfully');
     } catch (error: any) {
       logger.error('[DynamoDB] Failed to initialize client:', error);
+      initializationError = error;
 
       // Clear state so we can retry on next request
       credentialsCache = null;
@@ -97,12 +106,25 @@ async function getDynamoDB(): Promise<DynamoDBDocumentClient> {
     initializationPromise = null;
   }
 
+  // If we have a previous error but credentials are now available, clear everything and retry
+  if (initializationError && currentAccessKey) {
+    logger.debug('[DynamoDB] Credentials now available, clearing error state and retrying');
+    initializationError = null;
+    credentialsCache = null;
+    dynamoDB = null;
+    initializationPromise = null;
+  }
+
   // Ensure initialization
   if (!dynamoDB) {
     await initializeDynamoDB();
   }
 
-  return dynamoDB!;
+  if (!dynamoDB) {
+    throw new Error('DynamoDB client failed to initialize');
+  }
+
+  return dynamoDB;
 }
 
 // Table names

@@ -1,17 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { getOpenAIClient } from '@/lib/openai';
 import { logger } from '@/lib/logger';
-
-// Lazy initialization of OpenAI client to avoid build-time errors
-let openai: OpenAI | null = null;
-function getOpenAIClient() {
-  if (!openai) {
-    openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-  }
-  return openai;
-}
 
 // Simple in-memory cache (expires after 5 minutes)
 const cache = new Map<string, { reasonings: string[]; timestamp: number }>();

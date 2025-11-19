@@ -1,19 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { getOpenAIClient } from '@/lib/openai';
 
 export const runtime = 'nodejs';
-
-// Lazy initialization of OpenAI client to avoid build-time errors
-let openai: OpenAI | null = null;
-function getOpenAIClient() {
-  if (!openai) {
-    openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY || process.env.LLM_API_KEY,
-      baseURL: process.env.LLM_API_URL,
-    });
-  }
-  return openai;
-}
 
 export async function POST(request: NextRequest) {
   const isDev = process.env.NODE_ENV === 'development';
