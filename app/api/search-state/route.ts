@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/auth';
 import { getSearchState, saveSearchHistory, updateSearchState } from '@/lib/dynamodb';
 import { getClientIp } from '@/lib/ip-utils';
+import { logger } from '@/lib/logger';
 
 // GET: Retrieve search state
 export async function GET(request: NextRequest) {
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ searchState });
   } catch (error) {
-    console.error('[Search State API] GET error:', error);
+    logger.error('[Search State API] GET error:', error);
     return NextResponse.json(
       { error: 'Failed to retrieve search state' },
       { status: 500 }
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, searchId });
   } catch (error) {
-    console.error('[Search State API] POST error:', error);
+    logger.error('[Search State API] POST error:', error);
     return NextResponse.json(
       { error: 'Failed to save search state' },
       { status: 500 }
@@ -126,7 +127,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('[Search State API] PATCH error:', error);
+    logger.error('[Search State API] PATCH error:', error);
     return NextResponse.json(
       { error: 'Failed to update search state' },
       { status: 500 }

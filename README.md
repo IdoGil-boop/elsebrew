@@ -4,13 +4,13 @@
 
 Elsebrew is a fake-door MVP that helps coffee lovers discover cafés in new cities that match the vibe of their favorite local spots. Built with Next.js 14, Google Maps Platform, and AI-powered matching.
 
-> 📁 **New here?** See [FILE_TREE.txt](./FILE_TREE.txt) for a visual overview of the project structure.
+> 📁 **New here?** See [docs/FILE_TREE.txt](./docs/FILE_TREE.txt) for a visual overview of the project structure.
 >
-> 📚 **Looking for specific docs?** See [DOCS_INDEX.md](./DOCS_INDEX.md) for documentation navigation.
+> 📚 **Looking for specific docs?** See [docs/DOCS_INDEX.md](./docs/DOCS_INDEX.md) for documentation navigation.
 >
 > 🆕 **Latest Features:**
-> - ✅ Place interaction tracking for all users (anonymous + logged-in) - see [PLACE_TRACKING_FEATURE.md](PLACE_TRACKING_FEATURE.md)
-> - ✅ Atmosphere & amenity fields (outdoor seating, takeout, etc.) - see [ATMOSPHERE_FIELDS_IMPLEMENTATION.md](ATMOSPHERE_FIELDS_IMPLEMENTATION.md)
+> - ✅ Place interaction tracking for all users (anonymous + logged-in) - see [docs/PLACE_TRACKING_FEATURE.md](docs/PLACE_TRACKING_FEATURE.md)
+> - ✅ Atmosphere & amenity fields (outdoor seating, takeout, etc.) - see [docs/ATMOSPHERE_FIELDS_IMPLEMENTATION.md](docs/ATMOSPHERE_FIELDS_IMPLEMENTATION.md)
 
 ---
 
@@ -405,7 +405,7 @@ This is a **validation project**. The core functionality is real (live Google Ma
 
 This is a common issue when deploying to AWS Amplify. See the comprehensive guide:
 
-📖 **[DEPLOYMENT_TROUBLESHOOTING.md](DEPLOYMENT_TROUBLESHOOTING.md)**
+📖 **[docs/DEPLOYMENT_TROUBLESHOOTING.md](docs/DEPLOYMENT_TROUBLESHOOTING.md)**
 
 Quick fixes:
 1. Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` in AWS Amplify environment variables
@@ -449,7 +449,7 @@ Quick fixes:
 
 ### Need More Help?
 
-See [DEPLOYMENT_TROUBLESHOOTING.md](DEPLOYMENT_TROUBLESHOOTING.md) for detailed debugging steps, error message reference, and AWS-specific solutions.
+See [docs/DEPLOYMENT_TROUBLESHOOTING.md](docs/DEPLOYMENT_TROUBLESHOOTING.md) for detailed debugging steps, error message reference, and AWS-specific solutions.
 
 ---
 

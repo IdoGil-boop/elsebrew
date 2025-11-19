@@ -3,6 +3,7 @@ import { getUserFromRequest } from '@/lib/auth';
 import { getSeenButUnsavedPlaces, PlaceInteraction } from '@/lib/dynamodb';
 import { getClientIp } from '@/lib/ip-utils';
 import { hashIp } from '@/lib/ip-utils';
+import { logger } from '@/lib/logger';
 
 // GET /api/user/place-interactions/filter - Get places to filter out from search results
 // Works for both logged-in users and anonymous users
@@ -43,11 +44,11 @@ export async function GET(request: NextRequest) {
 
     const placeIdsToFilter = await getSeenButUnsavedPlaces(userId, searchContext);
 
-    console.log(`[Filter API] Returning ${placeIdsToFilter.length} seen places for ${destination}`);
+    logger.debug(`[Filter API] Returning ${placeIdsToFilter.length} seen places for ${destination}`);
 
     return NextResponse.json({ placeIdsToFilter });
   } catch (error) {
-    console.error('[Filter API] Error fetching places to filter:', error);
+    logger.error('[Filter API] Error fetching places to filter:', error);
     return NextResponse.json(
       { error: 'Failed to fetch filter list' },
       { status: 500 }

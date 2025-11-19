@@ -15,6 +15,7 @@ import RefineSearchModal from '@/components/results/RefineSearchModal';
 import Toast from '@/components/shared/Toast';
 import { getAuthToken, storage } from '@/lib/storage';
 import { generateSearchId, saveCompleteSearchState } from '@/lib/search-state-manager';
+import { logger, suppressGoogleMapsWarnings } from '@/lib/logger';
 
 function ResultsContent() {
   const searchParams = useSearchParams();
@@ -51,19 +52,22 @@ function ResultsContent() {
         return photo.getUrl({ maxWidth });
       }
     } catch (error) {
-      console.warn('Error getting photo URL:', error);
+      logger.warn('Error getting photo URL:', error);
     }
     return undefined;
   };
 
   useEffect(() => {
+    // Suppress Google Maps warnings in production
+    suppressGoogleMapsWarnings();
+
     const currentSearch = searchParams.toString();
     const savedState = storage.getResultsState();
-    
+
     // Check if we're restoring from saved page with matching params
     // Also check if this is a refinement (has refineSearch param)
     const isRefinement = searchParams.get('refineSearch') === 'true';
-    
+
     if (!isRefinement && savedState && savedState.searchParams === currentSearch && savedState.results) {
       // Restore cached results immediately
       const restoredResults: CafeMatch[] = savedState.results.map((r: any) => ({
@@ -95,7 +99,7 @@ function ResultsContent() {
       // storage.setResultsState(null);
       return; // Don't run the search again
     }
-    
+
     // New search or params changed - reset state and clear old cache
     setIsLoading(true);
     setError(null);
@@ -109,7 +113,7 @@ function ResultsContent() {
 
     // Debug: Check auth state on results page load
     const userProfile = storage.getUserProfile();
-    console.log('[Results Page] Loaded - auth state:', {
+    logger.debug('[Results Page] Loaded - auth state:', {
       hasProfile: !!userProfile,
       name: userProfile?.name,
       hasToken: !!userProfile?.token,
@@ -118,7 +122,7 @@ function ResultsContent() {
 
     // Prevent duplicate searches in React Strict Mode
     if (isSearchInProgress.current) {
-      console.log('[Results Page] Search already in progress, skipping duplicate');
+      logger.debug('[Results Page] Search already in progress, skipping duplicate');
       return;
     }
 
@@ -167,7 +171,7 @@ function ResultsContent() {
 
         // If this is a refinement, try to serve next batch from cache first
         if (isRefinement) {
-          console.log('[Results] Refinement detected, checking for cached results...');
+          logger.debug('[Results] Refinement detected, checking for cached results...');
           try {
             const authToken = getAuthToken();
             const headers: HeadersInit = {};
@@ -190,7 +194,7 @@ function ResultsContent() {
                 );
 
                 if (unseenResults.length > 0) {
-                  console.log(`[Results] Found ${unseenResults.length} cached unseen results, serving next batch`);
+                  logger.debug(`[Results] Found ${unseenResults.length} cached unseen results, serving next batch`);
 
                   // Serve next 5 unseen results
                   const nextBatch = unseenResults.slice(0, 5);
@@ -227,16 +231,16 @@ function ResultsContent() {
                         shownPlaceIds: updatedShownIds,
                       },
                     }),
-                  }).catch(err => console.warn('[Results] Failed to update shown IDs:', err));
+                  }).catch(err => logger.warn('[Results] Failed to update shown IDs:', err));
 
                   return; // Exit early, don't call Google
                 }
               }
             }
 
-            console.log('[Results] No cached results available, fetching from Google...');
+            logger.debug('[Results] No cached results available, fetching from Google...');
           } catch (cacheError) {
-            console.warn('[Results] Failed to check cache:', cacheError);
+            logger.warn('[Results] Failed to check cache:', cacheError);
             // Continue to Google fetch
           }
         }
@@ -246,7 +250,7 @@ function ResultsContent() {
         try {
           google = await loadGoogleMaps();
         } catch (mapError) {
-          console.error('[Results] Failed to load Google Maps:', mapError);
+          logger.error('[Results] Failed to load Google Maps:', mapError);
           throw new Error('Failed to load Google Maps. Please check your API key configuration.');
         }
 
@@ -290,7 +294,7 @@ function ResultsContent() {
                     editorialSummary: (place as any).editorial_summary?.overview,
                   });
                 } else {
-                  console.error('[Results] getPlaceDetails failed', {
+                  logger.error('[Results] getPlaceDetails failed', {
                     placeId,
                     status,
                     statusName: google.maps.places.PlacesServiceStatus[status],
@@ -378,10 +382,10 @@ function ResultsContent() {
           if (filterResponse.ok) {
             const data = await filterResponse.json();
             placeIdsToFilter = data.placeIdsToFilter || [];
-            console.log('[Results] Filtering out seen places:', placeIdsToFilter.length);
+            logger.debug('[Results] Filtering out seen places:', placeIdsToFilter.length);
           }
         } catch (error) {
-          console.warn('[Results] Failed to fetch filter list:', error);
+          logger.warn('[Results] Failed to fetch filter list:', error);
           // Continue without filtering
         }
 
@@ -511,7 +515,7 @@ function ResultsContent() {
             }));
           }
         } catch (err) {
-          console.error('Failed to fetch batch reasoning:', err);
+          logger.error('Failed to fetch batch reasoning:', err);
         }
 
         setResults(matchesWithReasoning);
@@ -532,7 +536,7 @@ function ResultsContent() {
           searchResult.allScoredResults,
           searchResult.hasMorePages,
           searchResult.nextPageToken
-        ).catch(err => console.warn('[Results] Failed to save search state:', err));
+        ).catch(err => logger.warn('[Results] Failed to save search state:', err));
 
         // Record place views for all users (logged-in and anonymous)
         if (matchesWithReasoning.length > 0) {
@@ -562,7 +566,7 @@ function ResultsContent() {
                 placeName: match.place.displayName,
                 searchContext,
               }),
-            }).catch(err => console.warn('[Results] Failed to record view:', err));
+            }).catch(err => logger.warn('[Results] Failed to record view:', err));
           });
         }
 
@@ -592,7 +596,7 @@ function ResultsContent() {
 
         setIsLoading(false);
       } catch (err) {
-        console.error('Search error:', err);
+        logger.error('Search error:', err);
         setError(err instanceof Error ? err.message : 'Search failed');
         setIsLoading(false);
       } finally {
@@ -632,7 +636,7 @@ function ResultsContent() {
   const handleSaveAll = async () => {
     // Check if user is logged in
     const userProfile = storage.getUserProfile();
-    console.log('[SaveAll] Retrieved user profile', {
+    logger.debug('[SaveAll] Retrieved user profile', {
       hasProfile: !!userProfile,
       name: userProfile?.name,
       hasToken: !!userProfile?.token,
@@ -640,13 +644,13 @@ function ResultsContent() {
     });
 
     if (!userProfile || !userProfile.token) {
-      console.log('[SaveAll] Missing profile or token - showing sign-in message');
+      logger.debug('[SaveAll] Missing profile or token - showing sign-in message');
       showToastMessage('Please sign in to save cafes', 'info');
       return;
     }
 
     const token = userProfile.token;
-    console.log('[SaveAll] Starting save operation', {
+    logger.debug('[SaveAll] Starting save operation', {
       cafeCount: results.length,
       tokenPreview: token.substring(0, 20) + '...',
     });
@@ -677,7 +681,7 @@ function ResultsContent() {
       // Check if any failed with 401 (token expired)
       const unauthorized = responses.filter(r => r.status === 401);
       if (unauthorized.length > 0) {
-        console.log('[SaveAll] Token expired - logging out user');
+        logger.debug('[SaveAll] Token expired - logging out user');
         storage.setUserProfile(null);
         showToastMessage('Your session has expired. Please sign in again.', 'info');
         setIsSavingAll(false);
@@ -693,7 +697,7 @@ function ResultsContent() {
       // Check if we need to save to localStorage (AWS not configured)
       const firstResponse = await responses[0]?.json();
       if (firstResponse?.localStorage) {
-        console.log('[SaveAll] Saving to localStorage (AWS not configured)');
+        logger.debug('[SaveAll] Saving to localStorage (AWS not configured)');
         // Save to localStorage
         results.forEach(({ place }) => {
           storage.saveCafe({
@@ -712,7 +716,7 @@ function ResultsContent() {
         'success'
       );
     } catch (error) {
-      console.error('Error saving cafes:', error);
+      logger.error('Error saving cafes:', error);
       showToastMessage('Failed to save cafes. Please try again.', 'error');
     } finally {
       setIsSavingAll(false);

@@ -20,7 +20,7 @@ Not sure where to start? This guide will point you to the right doc.
 → **[CHECKLIST.md](./CHECKLIST.md)** - From setup to production
 
 ### Learn everything
-→ **[README.md](./README.md)** - Comprehensive documentation
+→ **[README.md](../README.md)** - Comprehensive documentation
 
 ---
 
@@ -35,19 +35,29 @@ Not sure where to start? This guide will point you to the right doc.
 ### Understanding the Project
 - [PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md) - What was built
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - How it works
-- [README.md](./README.md) - Full technical docs
+- [README.md](../README.md) - Full technical docs
 
 ### Code & Development
-- [README.md](./README.md) - Development guide
+- [README.md](../README.md) - Development guide
 - `check-env.js` - Environment validation script
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - Component hierarchy
 
+### Ad-hoc Changes & Fixes
+- [changes/DEBUG_SAVE_ALL.md](./changes/DEBUG_SAVE_ALL.md) - Save all debugging notes
+- [changes/DEBUGGING_NO_RESULTS.md](./changes/DEBUGGING_NO_RESULTS.md) - No results debugging
+- [changes/FINAL_FIXES.md](./changes/FINAL_FIXES.md) - Final fixes summary
+- [changes/FIXES_APPLIED.md](./changes/FIXES_APPLIED.md) - Applied fixes log
+- [changes/FOLLOW_UP_FIXES.md](./changes/FOLLOW_UP_FIXES.md) - Follow-up fixes
+- [changes/OPENAI_LAZY_INIT_FIX.md](./changes/OPENAI_LAZY_INIT_FIX.md) - OpenAI client lazy initialization fix
+- [changes/REACT_STRICT_MODE_FIX.md](./changes/REACT_STRICT_MODE_FIX.md) - React strict mode fix
+- [changes/SAVE_ALL_FIX.md](./changes/SAVE_ALL_FIX.md) - Save all feature fix
+
 ### Deployment
 - [CHECKLIST.md](./CHECKLIST.md) - Launch checklist
-- [README.md](./README.md#-deployment) - Deployment section
+- [README.md](../README.md#-deployment) - Deployment section
 
 ### Legal & Compliance
-- [LICENSE](./LICENSE) - MIT License
+- [LICENSE](../LICENSE) - MIT License
 - Privacy Policy - `app/privacy/page.tsx`
 - Terms of Service - `app/terms/page.tsx`
 
@@ -60,20 +70,20 @@ Not sure where to start? This guide will point you to the right doc.
 2. [PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md) - Understand what it does
 
 ### Developer taking over the project
-1. [README.md](./README.md) - Full technical context
+1. [README.md](../README.md) - Full technical context
 2. [ARCHITECTURE.md](./ARCHITECTURE.md) - System design
 3. [SETUP_GUIDE.md](./SETUP_GUIDE.md) - Get APIs configured
 
 ### Deploying to production
 1. [CHECKLIST.md](./CHECKLIST.md) - Follow every step
-2. [README.md](./README.md#-deployment) - Platform-specific guides
+2. [README.md](../README.md#-deployment) - Platform-specific guides
 
 ### Understanding costs
-1. [README.md](./README.md#-google-maps-platform-terms-compliance) - Cost breakdown
+1. [README.md](../README.md#-google-maps-platform-terms-compliance) - Cost breakdown
 2. [PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md#-cost-estimates) - Monthly estimates
 
 ### Customizing the app
-1. [README.md](./README.md#-customization) - Customization guide
+1. [README.md](../README.md#-customization) - Customization guide
 2. [ARCHITECTURE.md](./ARCHITECTURE.md#scoring-algorithm) - Scoring logic
 
 ---
@@ -82,35 +92,35 @@ Not sure where to start? This guide will point you to the right doc.
 
 ### Google Maps Setup
 - [SETUP_GUIDE.md](./SETUP_GUIDE.md#google-maps-api-setup) - Detailed steps
-- [README.md](./README.md#google-maps-api-key) - Quick reference
+- [README.md](../README.md#google-maps-api-key) - Quick reference
 
 ### Google OAuth Setup
 - [SETUP_GUIDE.md](./SETUP_GUIDE.md#google-oauth-client-id) - Detailed steps
-- [README.md](./README.md#google-oauth-client-id-for-sign-in-with-google) - Quick reference
+- [README.md](../README.md#google-oauth-client-id-for-sign-in-with-google) - Quick reference
 
 ### OpenAI Setup
 - [SETUP_GUIDE.md](./SETUP_GUIDE.md#openai-api-key) - Detailed steps
-- [README.md](./README.md#openai-api-key) - Quick reference
+- [README.md](../README.md#openai-api-key) - Quick reference
 
 ### Analytics
-- [README.md](./README.md#-analytics-events) - Event tracking
+- [README.md](../README.md#-analytics-events) - Event tracking
 - [ARCHITECTURE.md](./ARCHITECTURE.md#analytics-events) - Implementation
 
 ### Scoring Algorithm
 - [ARCHITECTURE.md](./ARCHITECTURE.md#scoring-algorithm) - How it works
 - `lib/scoring.ts` - Implementation
-- [README.md](./README.md#adjust-scoring-algorithm) - Customization
+- [README.md](../README.md#adjust-scoring-algorithm) - Customization
 
 ### Data Flow
 - [ARCHITECTURE.md](./ARCHITECTURE.md#data-flow) - Visual diagram
-- [README.md](./README.md#-how-it-works) - Step-by-step
+- [README.md](../README.md#-how-it-works) - Step-by-step
 
 ### Security & Compliance
-- [README.md](./README.md#-google-maps-platform-terms-compliance) - Terms compliance
+- [README.md](../README.md#-google-maps-platform-terms-compliance) - Terms compliance
 - [ARCHITECTURE.md](./ARCHITECTURE.md#security--compliance) - Security practices
 
 ### Troubleshooting
-- [README.md](./README.md#-troubleshooting) - Common issues
+- [README.md](../README.md#-troubleshooting) - Common issues
 - [SETUP_GUIDE.md](./SETUP_GUIDE.md#troubleshooting) - Setup problems
 
 ---
@@ -142,7 +152,7 @@ Then read: [PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md)
 
 Need detailed setup: [SETUP_GUIDE.md](./SETUP_GUIDE.md)
 
-Want to customize: [README.md](./README.md#-customization)
+Want to customize: [README.md](../README.md#-customization)
 
 Ready to deploy: [CHECKLIST.md](./CHECKLIST.md)
 

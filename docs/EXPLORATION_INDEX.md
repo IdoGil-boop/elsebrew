@@ -7,7 +7,7 @@ This document provides a comprehensive index to the exploration of the Elsebrew 
 ## Documentation Files Created
 
 ### 1. **ARCHITECTURE_SUMMARY.txt** (28 KB)
-**Location:** `/Users/idogil/elsebrew/ARCHITECTURE_SUMMARY.txt`
+**Location:** `docs/ARCHITECTURE_SUMMARY.txt`
 
 Complete architectural reference covering:
 - Project structure (12 sections, ~2,000 lines)

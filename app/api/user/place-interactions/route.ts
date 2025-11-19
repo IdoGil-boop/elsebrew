@@ -8,6 +8,7 @@ import {
   PlaceInteraction,
 } from '@/lib/dynamodb';
 import { getClientIp, hashIp } from '@/lib/ip-utils';
+import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 
@@ -75,7 +76,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
   } catch (error) {
-    console.error('Error handling place interaction:', error);
+    logger.error('[Place Interactions API] Error:', error);
+    // Check if it's a DynamoDB connection issue
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    if (errorMessage.includes('AWS credentials') || errorMessage.includes('DynamoDB')) {
+      logger.error('[Place Interactions API] Database connection failed - check AWS configuration');
+    }
     return NextResponse.json(
       { error: 'Failed to process place interaction' },
       { status: 500 }

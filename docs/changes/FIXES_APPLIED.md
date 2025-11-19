@@ -54,11 +54,11 @@ Multiple possible causes:
 **Files Changed:**
 - [app/results/page.tsx](app/results/page.tsx)
 - [lib/maps-loader.ts](lib/maps-loader.ts)
-- [DEPLOYMENT_TROUBLESHOOTING.md](DEPLOYMENT_TROUBLESHOOTING.md) (new)
-- [README.md](README.md)
+- [../DEPLOYMENT_TROUBLESHOOTING.md](../DEPLOYMENT_TROUBLESHOOTING.md) (new)
+- [../../README.md](../../README.md)
 
 **Next Steps for User:**
-Follow [DEPLOYMENT_TROUBLESHOOTING.md](DEPLOYMENT_TROUBLESHOOTING.md) to:
+Follow [../DEPLOYMENT_TROUBLESHOOTING.md](../DEPLOYMENT_TROUBLESHOOTING.md) to:
 1. Check AWS Amplify environment variables
 2. Update Google Maps API key restrictions:
    - Find your Amplify app ID (e.g., `d1a2b3c4d5e6`) from your deployed URL
@@ -171,10 +171,10 @@ After deploying these changes:
 
 ## Additional Resources
 
-- **Deployment Guide:** [DEPLOYMENT_TROUBLESHOOTING.md](DEPLOYMENT_TROUBLESHOOTING.md)
-- **Architecture:** [ARCHITECTURE_SUMMARY.txt](ARCHITECTURE_SUMMARY.txt)
-- **File Structure:** [FILE_TREE.txt](FILE_TREE.txt)
-- **Main README:** [README.md](README.md)
+- **Deployment Guide:** [../DEPLOYMENT_TROUBLESHOOTING.md](../DEPLOYMENT_TROUBLESHOOTING.md)
+- **Architecture:** [../ARCHITECTURE_SUMMARY.txt](../ARCHITECTURE_SUMMARY.txt)
+- **File Structure:** [../FILE_TREE.txt](../FILE_TREE.txt)
+- **Main README:** [../../README.md](../../README.md)
 
 ---
 
@@ -182,5 +182,5 @@ After deploying these changes:
 
 If you encounter problems after these fixes:
 1. Check browser console for `[Maps Loader]` and `[Results]` log messages
-2. Review [DEPLOYMENT_TROUBLESHOOTING.md](DEPLOYMENT_TROUBLESHOOTING.md)
+2. Review [../DEPLOYMENT_TROUBLESHOOTING.md](../DEPLOYMENT_TROUBLESHOOTING.md)
 3. Open an issue with the detailed error logs

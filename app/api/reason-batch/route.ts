@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { logger } from '@/lib/logger';
 
 // Lazy initialization of OpenAI client to avoid build-time errors
 let openai: OpenAI | null = null;
@@ -199,7 +200,7 @@ Return a JSON array of ${candidates.length} strings, where each string is a comp
         reasonings = firstArray as string[] || [];
       }
     } catch (err) {
-      console.error('Failed to parse OpenAI response:', err);
+      logger.error('[Reason Batch] Failed to parse OpenAI response:', err);
     }
 
     // Fallback: If we didn't get enough reasonings, fill with defaults
@@ -222,14 +223,22 @@ Return a JSON array of ${candidates.length} strings, where each string is a comp
 
     return NextResponse.json({ reasonings });
   } catch (error) {
-    console.error('Error generating batch reasoning:', error);
+    logger.error('[Reason Batch] Error generating batch reasoning:', error);
     // Return default reasonings based on number of candidates
-    const body = await request.json();
-    const defaultReasoning = Array(body.candidates?.length || 1).fill('Similar atmosphere and quality.');
-    return NextResponse.json(
-      { reasonings: defaultReasoning },
-      { status: 200 }
-    );
+    try {
+      const body = await request.json();
+      const defaultReasoning = Array(body.candidates?.length || 1).fill('Similar atmosphere and quality.');
+      return NextResponse.json(
+        { reasonings: defaultReasoning },
+        { status: 200 }
+      );
+    } catch (parseError) {
+      logger.error('[Reason Batch] Failed to parse request body in error handler:', parseError);
+      return NextResponse.json(
+        { reasonings: ['Similar atmosphere and quality.'] },
+        { status: 200 }
+      );
+    }
   }
 }
 

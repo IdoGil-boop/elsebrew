@@ -1,28 +1,55 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { logger } from './logger';
 
 // Lazy initialization of DynamoDB client
 let dynamoDB: DynamoDBDocumentClient | null = null;
+let initializationError: Error | null = null;
 
 function getDynamoDB(): DynamoDBDocumentClient {
+  // If we previously failed to initialize, throw the same error
+  if (initializationError) {
+    throw initializationError;
+  }
+
   if (!dynamoDB) {
-    const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-    const region = process.env.AWS_REGION || 'us-east-1';
+    try {
+      const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+      const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+      const region = process.env.AWS_REGION || 'us-east-1';
 
-    if (!accessKeyId || !secretAccessKey) {
-      throw new Error('AWS credentials not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env.local');
+      if (!accessKeyId || !secretAccessKey) {
+        initializationError = new Error('AWS credentials not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env.local');
+        logger.error('[DynamoDB] Initialization failed:', initializationError.message);
+        throw initializationError;
+      }
+
+      logger.debug('[DynamoDB] Initializing client', {
+        region,
+        hasAccessKey: !!accessKeyId,
+        hasSecretKey: !!secretAccessKey,
+      });
+
+      const client = new DynamoDBClient({
+        region,
+        credentials: {
+          accessKeyId,
+          secretAccessKey,
+        },
+        // Add timeout and retry configuration for cross-region reliability
+        maxAttempts: 3,
+        requestHandler: {
+          requestTimeout: 10000, // 10 second timeout
+        } as any,
+      });
+
+      dynamoDB = DynamoDBDocumentClient.from(client);
+      logger.debug('[DynamoDB] Client initialized successfully');
+    } catch (error) {
+      initializationError = error as Error;
+      logger.error('[DynamoDB] Failed to initialize client:', error);
+      throw error;
     }
-
-    const client = new DynamoDBClient({
-      region,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
-      },
-    });
-
-    dynamoDB = DynamoDBDocumentClient.from(client);
   }
 
   return dynamoDB;
@@ -379,7 +406,7 @@ export async function migrateAnonymousDataToUser(
       return { migratedCount: 0, errors: 0 };
     }
 
-    console.log(`[Migration] Migrating ${ipInteractions.length} interactions from IP ${ipAddress} to user ${userId}`);
+    logger.debug(`[Migration] Migrating ${ipInteractions.length} interactions from IP ${ipAddress} to user ${userId}`);
 
     let migratedCount = 0;
     let errors = 0;
@@ -435,15 +462,15 @@ export async function migrateAnonymousDataToUser(
 
         migratedCount++;
       } catch (error) {
-        console.error(`[Migration] Error migrating place ${ipInteraction.placeId}:`, error);
+        logger.error(`[Migration] Error migrating place ${ipInteraction.placeId}:`, error);
         errors++;
       }
     }
 
-    console.log(`[Migration] Complete: ${migratedCount} migrated, ${errors} errors`);
+    logger.debug(`[Migration] Complete: ${migratedCount} migrated, ${errors} errors`);
     return { migratedCount, errors };
   } catch (error) {
-    console.error('[Migration] Failed to migrate anonymous data:', error);
+    logger.error('[Migration] Failed to migrate anonymous data:', error);
     return { migratedCount: 0, errors: 1 };
   }
 }
