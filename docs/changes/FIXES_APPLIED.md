@@ -172,7 +172,7 @@ After deploying these changes:
 ## Additional Resources
 
 - **Deployment Guide:** [../DEPLOYMENT_TROUBLESHOOTING.md](../DEPLOYMENT_TROUBLESHOOTING.md)
-- **Architecture:** [../ARCHITECTURE_SUMMARY.txt](../ARCHITECTURE_SUMMARY.txt)
+- **Architecture:** [../ARCHITECTURE.md](../ARCHITECTURE.md)
 - **File Structure:** [../FILE_TREE.txt](../FILE_TREE.txt)
 - **Main README:** [../../README.md](../../README.md)
 

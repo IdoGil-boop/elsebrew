@@ -231,7 +231,7 @@ The code now includes detailed logging. Check:
 
 If you're still stuck:
 1. Check [FILE_TREE.txt](./FILE_TREE.txt) for code structure
-2. Check [ARCHITECTURE_SUMMARY.txt](./ARCHITECTURE_SUMMARY.txt) for system design
+2. Check [ARCHITECTURE.md](./ARCHITECTURE.md) for system design
 3. Open an issue with:
    - Error message from console
    - Network tab screenshot

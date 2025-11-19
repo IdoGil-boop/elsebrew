@@ -1,34 +1,89 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { logger } from './logger';
 
 // Lazy initialization of DynamoDB client
 let dynamoDB: DynamoDBDocumentClient | null = null;
 let initializationError: Error | null = null;
+let credentialsCache: { accessKeyId: string; secretAccessKey: string } | null = null;
+let initializationPromise: Promise<void> | null = null;
 
-function getDynamoDB(): DynamoDBDocumentClient {
+async function getCredentialsFromSecretsManager(): Promise<{ accessKeyId: string; secretAccessKey: string } | null> {
+  const secretName = process.env.AWS_SECRETS_MANAGER_SECRET_NAME || 'elsebrew/aws-credentials';
+  
+  try {
+    // Use default credential chain (IAM role in Lambda, or env vars locally)
+    const client = new SecretsManagerClient({
+      region: process.env.AWS_REGION || 'us-east-1',
+      // Don't specify credentials - let it use IAM role in Lambda or default chain
+    });
+
+    const response = await client.send(
+      new GetSecretValueCommand({ SecretId: secretName })
+    );
+
+    if (!response.SecretString) {
+      return null;
+    }
+
+    const secret = JSON.parse(response.SecretString);
+    return {
+      accessKeyId: secret.AWS_ACCESS_KEY_ID || secret.accessKeyId,
+      secretAccessKey: secret.AWS_SECRET_ACCESS_KEY || secret.secretAccessKey,
+    };
+  } catch (error) {
+    logger.debug('[DynamoDB] Failed to get credentials from Secrets Manager:', error);
+    return null;
+  }
+}
+
+async function getCredentials(): Promise<{ accessKeyId: string; secretAccessKey: string }> {
+  // Check environment variables first
+  let accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  let secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+
+  // If not in env vars, try Secrets Manager
+  if ((!accessKeyId || !secretAccessKey) && !credentialsCache) {
+    const secrets = await getCredentialsFromSecretsManager();
+    if (secrets) {
+      credentialsCache = secrets;
+      accessKeyId = secrets.accessKeyId;
+      secretAccessKey = secrets.secretAccessKey;
+    }
+  } else if (credentialsCache) {
+    accessKeyId = credentialsCache.accessKeyId;
+    secretAccessKey = credentialsCache.secretAccessKey;
+  }
+
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error('AWS credentials not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in environment variables or AWS Secrets Manager');
+  }
+
+  return { accessKeyId, secretAccessKey };
+}
+
+export async function initializeDynamoDB(): Promise<void> {
   // If we previously failed to initialize, throw the same error
   if (initializationError) {
     throw initializationError;
   }
 
-  if (!dynamoDB) {
+  if (dynamoDB) {
+    return; // Already initialized
+  }
+
+  // If initialization is in progress, wait for it
+  if (initializationPromise) {
+    await initializationPromise;
+    return;
+  }
+
+  // Start initialization
+  initializationPromise = (async () => {
     try {
-      const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-      const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+      const { accessKeyId, secretAccessKey } = await getCredentials();
       const region = process.env.AWS_REGION || 'us-east-1';
-
-      if (!accessKeyId || !secretAccessKey) {
-        initializationError = new Error('AWS credentials not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env.local');
-        logger.error('[DynamoDB] Initialization failed:', initializationError.message);
-        throw initializationError;
-      }
-
-      logger.debug('[DynamoDB] Initializing client', {
-        region,
-        hasAccessKey: !!accessKeyId,
-        hasSecretKey: !!secretAccessKey,
-      });
 
       const client = new DynamoDBClient({
         region,
@@ -50,9 +105,23 @@ function getDynamoDB(): DynamoDBDocumentClient {
       logger.error('[DynamoDB] Failed to initialize client:', error);
       throw error;
     }
+  })();
+
+  await initializationPromise;
+}
+
+async function getDynamoDB(): Promise<DynamoDBDocumentClient> {
+  // If we previously failed to initialize, throw the same error
+  if (initializationError) {
+    throw initializationError;
   }
 
-  return dynamoDB;
+  // Ensure initialization
+  if (!dynamoDB) {
+    await initializeDynamoDB();
+  }
+
+  return dynamoDB!;
 }
 
 // Table names
@@ -138,7 +207,8 @@ export interface PlaceInteraction {
 
 // User operations
 export async function getUser(userId: string): Promise<UserProfile | null> {
-  const result = await getDynamoDB().send(
+  const db = await getDynamoDB();
+  const result = await db.send(
     new GetCommand({
       TableName: TABLES.USERS,
       Key: { userId },
@@ -148,7 +218,8 @@ export async function getUser(userId: string): Promise<UserProfile | null> {
 }
 
 export async function createOrUpdateUser(user: UserProfile): Promise<void> {
-  await getDynamoDB().send(
+  const db = await getDynamoDB();
+  await db.send(
     new PutCommand({
       TableName: TABLES.USERS,
       Item: {
@@ -161,7 +232,8 @@ export async function createOrUpdateUser(user: UserProfile): Promise<void> {
 
 // Saved places operations
 export async function getSavedPlaces(userId: string): Promise<SavedPlace[]> {
-  const result = await getDynamoDB().send(
+  const db = await getDynamoDB();
+  const result = await db.send(
     new QueryCommand({
       TableName: TABLES.SAVED_PLACES,
       KeyConditionExpression: 'userId = :userId',
@@ -175,7 +247,8 @@ export async function getSavedPlaces(userId: string): Promise<SavedPlace[]> {
 }
 
 export async function savePlace(place: SavedPlace): Promise<void> {
-  await getDynamoDB().send(
+  const db = await getDynamoDB();
+  await db.send(
     new PutCommand({
       TableName: TABLES.SAVED_PLACES,
       Item: {
@@ -187,7 +260,8 @@ export async function savePlace(place: SavedPlace): Promise<void> {
 }
 
 export async function deleteSavedPlace(userId: string, placeId: string): Promise<void> {
-  await getDynamoDB().send(
+  const db = await getDynamoDB();
+  await db.send(
     new DeleteCommand({
       TableName: TABLES.SAVED_PLACES,
       Key: { userId, placeId },
@@ -197,7 +271,8 @@ export async function deleteSavedPlace(userId: string, placeId: string): Promise
 
 // Search history operations
 export async function getSearchHistory(userId: string, limit = 20): Promise<SearchHistoryItem[]> {
-  const result = await getDynamoDB().send(
+  const db = await getDynamoDB();
+  const result = await db.send(
     new QueryCommand({
       TableName: TABLES.SEARCH_HISTORY,
       KeyConditionExpression: 'userId = :userId',
@@ -212,7 +287,8 @@ export async function getSearchHistory(userId: string, limit = 20): Promise<Sear
 }
 
 export async function saveSearchHistory(history: SearchHistoryItem): Promise<void> {
-  await getDynamoDB().send(
+  const db = await getDynamoDB();
+  await db.send(
     new PutCommand({
       TableName: TABLES.SEARCH_HISTORY,
       Item: history,
@@ -221,7 +297,8 @@ export async function saveSearchHistory(history: SearchHistoryItem): Promise<voi
 }
 
 export async function getSearchState(userId: string, searchId: string): Promise<SearchHistoryItem | null> {
-  const result = await getDynamoDB().send(
+  const db = await getDynamoDB();
+  const result = await db.send(
     new GetCommand({
       TableName: TABLES.SEARCH_HISTORY,
       Key: { userId, searchId },
@@ -250,7 +327,8 @@ export async function updateSearchState(
 
   if (updateExpressions.length === 0) return;
 
-  await getDynamoDB().send(
+  const db = await getDynamoDB();
+  await db.send(
     new UpdateCommand({
       TableName: TABLES.SEARCH_HISTORY,
       Key: { userId, searchId },
@@ -272,7 +350,8 @@ export async function recordPlaceView(
   const now = new Date().toISOString();
 
   // Try to get existing interaction
-  const existing = await getDynamoDB().send(
+  const db = await getDynamoDB();
+  const existing = await db.send(
     new GetCommand({
       TableName: TABLES.PLACE_INTERACTIONS,
       Key: { userId, placeId },
@@ -282,7 +361,7 @@ export async function recordPlaceView(
   if (existing.Item) {
     // Update existing record
     const item = existing.Item as PlaceInteraction;
-    await getDynamoDB().send(
+    await db.send(
       new PutCommand({
         TableName: TABLES.PLACE_INTERACTIONS,
         Item: {
@@ -295,7 +374,7 @@ export async function recordPlaceView(
     );
   } else {
     // Create new record
-    await getDynamoDB().send(
+    await db.send(
       new PutCommand({
         TableName: TABLES.PLACE_INTERACTIONS,
         Item: {
@@ -317,7 +396,8 @@ export async function recordPlaceView(
 export async function markPlaceAsSaved(userId: string, placeId: string): Promise<void> {
   const now = new Date().toISOString();
 
-  const existing = await getDynamoDB().send(
+  const db = await getDynamoDB();
+  const existing = await db.send(
     new GetCommand({
       TableName: TABLES.PLACE_INTERACTIONS,
       Key: { userId, placeId },
@@ -325,7 +405,7 @@ export async function markPlaceAsSaved(userId: string, placeId: string): Promise
   );
 
   if (existing.Item) {
-    await getDynamoDB().send(
+    await db.send(
       new PutCommand({
         TableName: TABLES.PLACE_INTERACTIONS,
         Item: {
@@ -339,7 +419,8 @@ export async function markPlaceAsSaved(userId: string, placeId: string): Promise
 }
 
 export async function markPlaceAsUnsaved(userId: string, placeId: string): Promise<void> {
-  const existing = await getDynamoDB().send(
+  const db = await getDynamoDB();
+  const existing = await db.send(
     new GetCommand({
       TableName: TABLES.PLACE_INTERACTIONS,
       Key: { userId, placeId },
@@ -348,7 +429,7 @@ export async function markPlaceAsUnsaved(userId: string, placeId: string): Promi
 
   if (existing.Item) {
     const { savedAt, ...rest } = existing.Item;
-    await getDynamoDB().send(
+    await db.send(
       new PutCommand({
         TableName: TABLES.PLACE_INTERACTIONS,
         Item: {
@@ -361,7 +442,8 @@ export async function markPlaceAsUnsaved(userId: string, placeId: string): Promi
 }
 
 export async function getPlaceInteractions(userId: string): Promise<PlaceInteraction[]> {
-  const result = await getDynamoDB().send(
+  const db = await getDynamoDB();
+  const result = await db.send(
     new QueryCommand({
       TableName: TABLES.PLACE_INTERACTIONS,
       KeyConditionExpression: 'userId = :userId',
@@ -415,13 +497,14 @@ export async function migrateAnonymousDataToUser(
     const userInteractions = await getPlaceInteractions(userId);
     const userPlaceIds = new Set(userInteractions.map(i => i.placeId));
 
+    const db = await getDynamoDB();
     for (const ipInteraction of ipInteractions) {
       try {
         if (userPlaceIds.has(ipInteraction.placeId)) {
           // User already has this place interaction, merge view counts
           const userInteraction = userInteractions.find(i => i.placeId === ipInteraction.placeId);
           if (userInteraction) {
-            await getDynamoDB().send(
+            await db.send(
               new PutCommand({
                 TableName: TABLES.PLACE_INTERACTIONS,
                 Item: {
@@ -440,7 +523,7 @@ export async function migrateAnonymousDataToUser(
           }
         } else {
           // Create new interaction for user
-          await getDynamoDB().send(
+          await db.send(
             new PutCommand({
               TableName: TABLES.PLACE_INTERACTIONS,
               Item: {
@@ -453,7 +536,7 @@ export async function migrateAnonymousDataToUser(
         }
 
         // Delete the IP-based record
-        await getDynamoDB().send(
+        await db.send(
           new DeleteCommand({
             TableName: TABLES.PLACE_INTERACTIONS,
             Key: { userId: ipAddress, placeId: ipInteraction.placeId },
