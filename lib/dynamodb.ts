@@ -24,11 +24,17 @@ function getCredentials(): { accessKeyId: string; secretAccessKey: string; regio
   });
 
   if (!accessKeyId || !secretAccessKey) {
-    const error = new Error('AWS credentials not configured. Set DYNAMODB_ACCESS_KEY_ID and DYNAMODB_SECRET_ACCESS_KEY environment variables.');
+    const availableVars = Object.keys(process.env).filter(k => k.startsWith('DYNAMODB_'));
+    const error = new Error(
+      'AWS credentials not configured. Set DYNAMODB_ACCESS_KEY_ID and DYNAMODB_SECRET_ACCESS_KEY environment variables. ' +
+      'In AWS Amplify: Go to Environment Variables → Add as Secrets → Redeploy. ' +
+      `Found ${availableVars.length} DYNAMODB_* vars: ${availableVars.join(', ') || 'none'}`
+    );
     logger.error('[DynamoDB] Credentials check failed', {
       hasAccessKey: !!accessKeyId,
       hasSecretKey: !!secretAccessKey,
-      availableEnvVars: Object.keys(process.env).filter(k => k.startsWith('DYNAMODB_')),
+      availableEnvVars: availableVars,
+      allEnvVarCount: Object.keys(process.env).length,
     });
     throw error;
   }

@@ -11,8 +11,15 @@ export const storage = {
   // User profile
   getUserProfile: (): UserProfile | null => {
     if (typeof window === 'undefined') return null;
-    const data = localStorage.getItem(STORAGE_KEYS.USER_PROFILE);
-    return data ? JSON.parse(data) : null;
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.USER_PROFILE);
+      return data ? JSON.parse(data) : null;
+    } catch (error) {
+      console.error('[Storage] Error parsing user profile:', error);
+      // Clear corrupted data
+      localStorage.removeItem(STORAGE_KEYS.USER_PROFILE);
+      return null;
+    }
   },
 
   setUserProfile: (profile: UserProfile | null) => {
@@ -33,8 +40,15 @@ export const storage = {
   // Saved cafes
   getSavedCafes: (): SavedCafe[] => {
     if (typeof window === 'undefined') return [];
-    const data = localStorage.getItem(STORAGE_KEYS.SAVED_CAFES);
-    return data ? JSON.parse(data) : [];
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.SAVED_CAFES);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error('[Storage] Error parsing saved cafes:', error);
+      // Clear corrupted data
+      localStorage.removeItem(STORAGE_KEYS.SAVED_CAFES);
+      return [];
+    }
   },
 
   saveCafe: (cafe: SavedCafe) => {
@@ -117,8 +131,14 @@ export const storage = {
   // Navigation state
   getNavigationState: (): { previousRoute: string; searchParams?: string } | null => {
     if (typeof window === 'undefined') return null;
-    const data = sessionStorage.getItem(STORAGE_KEYS.NAVIGATION_STATE);
-    return data ? JSON.parse(data) : null;
+    try {
+      const data = sessionStorage.getItem(STORAGE_KEYS.NAVIGATION_STATE);
+      return data ? JSON.parse(data) : null;
+    } catch (error) {
+      console.error('[Storage] Error parsing navigation state:', error);
+      sessionStorage.removeItem(STORAGE_KEYS.NAVIGATION_STATE);
+      return null;
+    }
   },
 
   setNavigationState: (state: { previousRoute: string; searchParams?: string } | null) => {

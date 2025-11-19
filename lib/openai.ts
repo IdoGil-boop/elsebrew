@@ -16,9 +16,15 @@ function getOpenAIKey(): string {
   });
 
   if (!apiKey) {
-    const error = new Error('OpenAI API key not configured. Set OPENAI_API_KEY or LLM_API_KEY environment variable.');
+    const availableVars = Object.keys(process.env).filter(k => k.includes('OPENAI') || k.includes('LLM'));
+    const error = new Error(
+      'OpenAI API key not configured. Set OPENAI_API_KEY or LLM_API_KEY environment variable. ' +
+      'In AWS Amplify: Go to Environment Variables → Add as Secrets → Redeploy. ' +
+      `Found ${availableVars.length} OPENAI/LLM vars: ${availableVars.join(', ') || 'none'}`
+    );
     logger.error('[OpenAI] API key check failed', {
-      availableEnvVars: Object.keys(process.env).filter(k => k.includes('OPENAI') || k.includes('LLM')),
+      availableEnvVars: availableVars,
+      allEnvVarCount: Object.keys(process.env).length,
     });
     throw error;
   }

@@ -16,70 +16,81 @@ export default function SavedPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    analytics.track({ name: 'view_saved', params: {} });
+    try {
+      analytics.track({ name: 'view_saved', params: {} });
+    } catch (error) {
+      console.error('Error tracking view_saved event:', error);
+    }
   }, []);
 
   useEffect(() => {
     const loadSavedCafes = async () => {
-      setIsLoading(true);
-      const userProfile = storage.getUserProfile();
-      setUser(userProfile);
-
-      if (!userProfile || !userProfile.token) {
-        // Not logged in, use localStorage only
-        setSavedCafes(storage.getSavedCafes());
-        setIsLoading(false);
-        return;
-      }
-
       try {
-        // Try to fetch from API first
-        const response = await fetch('/api/user/saved-places', {
-          headers: {
-            'Authorization': `Bearer ${userProfile.token}`,
-          },
-        });
+        setIsLoading(true);
+        const userProfile = storage.getUserProfile();
+        setUser(userProfile);
 
-        // Handle token expiration
-        if (response.status === 401) {
-          console.log('[Saved Page] Token expired - logging out user');
-          storage.setUserProfile(null);
-          setUser(null);
+        if (!userProfile || !userProfile.token) {
+          // Not logged in, use localStorage only
           setSavedCafes(storage.getSavedCafes());
           setIsLoading(false);
           return;
         }
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data.places && data.places.length > 0) {
-            // Convert API format to SavedCafe format
-            const cafes: SavedCafe[] = data.places.map((place: any) => ({
-              placeId: place.placeId,
-              name: place.name,
-              savedAt: new Date(place.savedAt).getTime(),
-              photoUrl: place.photoUrl,
-              rating: place.rating,
-            }));
-            setSavedCafes(cafes);
-            // Also sync to localStorage for offline access
-            cafes.forEach(cafe => storage.saveCafe(cafe));
-          } else if (!data.localStorage) {
-            // API returned empty, use localStorage as fallback
+        try {
+          // Try to fetch from API first
+          const response = await fetch('/api/user/saved-places', {
+            headers: {
+              'Authorization': `Bearer ${userProfile.token}`,
+            },
+          });
+
+          // Handle token expiration
+          if (response.status === 401) {
+            console.log('[Saved Page] Token expired - logging out user');
+            storage.setUserProfile(null);
+            setUser(null);
             setSavedCafes(storage.getSavedCafes());
+            setIsLoading(false);
+            return;
+          }
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.places && data.places.length > 0) {
+              // Convert API format to SavedCafe format
+              const cafes: SavedCafe[] = data.places.map((place: any) => ({
+                placeId: place.placeId,
+                name: place.name,
+                savedAt: new Date(place.savedAt).getTime(),
+                photoUrl: place.photoUrl,
+                rating: place.rating,
+              }));
+              setSavedCafes(cafes);
+              // Also sync to localStorage for offline access
+              cafes.forEach(cafe => storage.saveCafe(cafe));
+            } else if (!data.localStorage) {
+              // API returned empty, use localStorage as fallback
+              setSavedCafes(storage.getSavedCafes());
+            } else {
+              // AWS not configured, use localStorage
+              setSavedCafes(storage.getSavedCafes());
+            }
           } else {
-            // AWS not configured, use localStorage
+            // API failed, use localStorage
             setSavedCafes(storage.getSavedCafes());
           }
-        } else {
-          // API failed, use localStorage
+        } catch (error) {
+          console.error('Error fetching saved places:', error);
+          // Fallback to localStorage
           setSavedCafes(storage.getSavedCafes());
+        } finally {
+          setIsLoading(false);
         }
       } catch (error) {
-        console.error('Error fetching saved places:', error);
-        // Fallback to localStorage
-        setSavedCafes(storage.getSavedCafes());
-      } finally {
+        console.error('[Saved Page] Error loading saved cafes:', error);
+        // Fallback to empty array if everything fails
+        setSavedCafes([]);
         setIsLoading(false);
       }
     };
@@ -102,7 +113,11 @@ export default function SavedPage() {
   }, []);
 
   const handleRemove = async (placeId: string) => {
-    analytics.track({ name: 'saved_cafe_remove', params: { place_id: placeId } });
+    try {
+      analytics.track({ name: 'saved_cafe_remove', params: { place_id: placeId } });
+    } catch (error) {
+      console.error('Error tracking saved_cafe_remove event:', error);
+    }
     const userProfile = storage.getUserProfile();
     
     // Remove from localStorage

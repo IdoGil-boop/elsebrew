@@ -4,6 +4,35 @@ frontend:
     preBuild:
       commands:
         - npm ci
+        # Capture environment variables and make them available to Next.js serverless functions
+        # AWS Amplify env vars are available at build time but need to be passed to Lambda runtime
+        - |
+          echo "Creating .env.production for serverless functions..."
+          touch .env.production
+          # DynamoDB variables
+          if [ -n "$DYNAMODB_ACCESS_KEY_ID" ]; then
+            echo "DYNAMODB_ACCESS_KEY_ID=$DYNAMODB_ACCESS_KEY_ID" >> .env.production
+          fi
+          if [ -n "$DYNAMODB_SECRET_ACCESS_KEY" ]; then
+            echo "DYNAMODB_SECRET_ACCESS_KEY=$DYNAMODB_SECRET_ACCESS_KEY" >> .env.production
+          fi
+          if [ -n "$DYNAMODB_REGION" ]; then
+            echo "DYNAMODB_REGION=$DYNAMODB_REGION" >> .env.production
+          fi
+          # OpenAI variables
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> .env.production
+          fi
+          if [ -n "$LLM_API_KEY" ]; then
+            echo "LLM_API_KEY=$LLM_API_KEY" >> .env.production
+          fi
+          if [ -n "$LLM_API_URL" ]; then
+            echo "LLM_API_URL=$LLM_API_URL" >> .env.production
+          fi
+          # Other variables that need to be available at runtime
+          if [ -n "$NEXT_PUBLIC_GA4_MEASUREMENT_ID" ]; then
+            echo "NEXT_PUBLIC_GA4_MEASUREMENT_ID=$NEXT_PUBLIC_GA4_MEASUREMENT_ID" >> .env.production
+          fi
     build:
       commands:
         - npm run build
