@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import SearchPanel from '@/components/home/SearchPanel';
+// Trigger rebuild with env vars
 import EmailSignup from '@/components/home/EmailSignup';
 // import PricingStrip from '@/components/home/PricingStrip';
 import TypingTitle from '@/components/home/TypingTitle';
