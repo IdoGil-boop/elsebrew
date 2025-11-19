@@ -42,11 +42,6 @@ function getCredentials(): { accessKeyId: string; secretAccessKey: string; regio
 }
 
 export async function initializeDynamoDB(): Promise<void> {
-  // If we previously failed to initialize, throw the same error
-  if (initializationError) {
-    throw initializationError;
-  }
-
   if (dynamoDB) {
     return; // Already initialized
   }
@@ -78,19 +73,13 @@ export async function initializeDynamoDB(): Promise<void> {
       dynamoDB = DynamoDBDocumentClient.from(client);
       logger.debug('[DynamoDB] Client initialized successfully');
     } catch (error: any) {
-      initializationError = error as Error;
       logger.error('[DynamoDB] Failed to initialize client:', error);
-      
-      // If credentials are invalid, clear everything so we can retry with fresh credentials
-      if (error?.name === 'UnrecognizedClientException' || 
-          error?.__type === 'com.amazon.coral.service#UnrecognizedClientException') {
-        logger.warn('[DynamoDB] Invalid credentials detected, clearing cache and error state');
-        credentialsCache = null;
-        dynamoDB = null;
-        initializationError = null; // Clear error so we can retry
-        initializationPromise = null; // Clear promise so we can retry
-      }
-      
+
+      // Clear state so we can retry on next request
+      credentialsCache = null;
+      dynamoDB = null;
+      initializationPromise = null;
+
       throw error;
     }
   })();
@@ -105,13 +94,7 @@ async function getDynamoDB(): Promise<DynamoDBDocumentClient> {
     logger.debug('[DynamoDB] Credentials changed, clearing cache');
     credentialsCache = null;
     dynamoDB = null;
-    initializationError = null;
     initializationPromise = null;
-  }
-
-  // If we previously failed to initialize, throw the same error
-  if (initializationError) {
-    throw initializationError;
   }
 
   // Ensure initialization
