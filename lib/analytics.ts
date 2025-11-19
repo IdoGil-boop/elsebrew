@@ -4,19 +4,31 @@ declare global {
   interface Window {
     gtag?: (...args: any[]) => void;
     plausible?: (event: string, options?: { props: Record<string, any> }) => void;
+    dataLayer?: any[];
   }
 }
 
 export const track = (event: AnalyticsEvent) => {
   const { name, params = {} } = event;
 
-  // GA4
-  if (typeof window !== 'undefined' && window.gtag && process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID) {
-    window.gtag('event', name, params);
+  if (typeof window === 'undefined') return;
+
+  // GA4 - use dataLayer to queue events even if gtag isn't loaded yet
+  if (process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID) {
+    // Initialize dataLayer if it doesn't exist
+    if (!window.dataLayer) {
+      window.dataLayer = [];
+    }
+
+    // Push event to dataLayer (gtag will process it when it loads)
+    window.dataLayer.push({
+      event: name,
+      ...params,
+    });
   }
 
   // Plausible (if GA4 not configured)
-  if (typeof window !== 'undefined' && window.plausible && !process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID) {
+  if (window.plausible && !process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID) {
     window.plausible(name, { props: params });
   }
 
@@ -27,7 +39,21 @@ export const track = (event: AnalyticsEvent) => {
 };
 
 export const trackPageView = (url: string) => {
-  if (typeof window !== 'undefined' && window.gtag && process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID) {
+  if (typeof window === 'undefined' || !process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID) return;
+
+  // Initialize dataLayer if it doesn't exist
+  if (!window.dataLayer) {
+    window.dataLayer = [];
+  }
+
+  // Push page view to dataLayer
+  window.dataLayer.push({
+    event: 'page_view',
+    page_path: url,
+  });
+
+  // Also call gtag directly if available
+  if (window.gtag) {
     window.gtag('config', process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID, {
       page_path: url,
     });

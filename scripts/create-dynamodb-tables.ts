@@ -7,10 +7,10 @@ import { CreateTableCommand, DescribeTableCommand } from '@aws-sdk/client-dynamo
 config({ path: resolve(process.cwd(), '.env.local') });
 
 const client = new DynamoDBClient({
-  region: process.env.AWS_REGION || 'us-east-1',
+  region: process.env.DYNAMODB_REGION || 'us-east-1',
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY!,
   },
 });
 

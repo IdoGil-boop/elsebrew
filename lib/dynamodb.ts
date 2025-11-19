@@ -1,115 +1,44 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { logger } from './logger';
 
 // Lazy initialization of DynamoDB client
 let dynamoDB: DynamoDBDocumentClient | null = null;
 let initializationError: Error | null = null;
-let credentialsCache: { accessKeyId: string; secretAccessKey: string; region?: string } | null = null;
+let credentialsCache: { accessKeyId: string; secretAccessKey: string; region: string } | null = null;
 let initializationPromise: Promise<void> | null = null;
 
-async function getCredentialsFromSecretsManager(): Promise<{ accessKeyId: string; secretAccessKey: string; region?: string } | null> {
-  // Try multiple possible secret names/patterns
-  const possibleSecretNames = [
-    process.env.AWS_SECRETS_MANAGER_SECRET_NAME,
-    'amplify/elsebrew/aws-credentials',
-    'elsebrew/aws-credentials',
-    'aws-credentials',
-  ].filter(Boolean) as string[];
-  
-  const region = process.env.AWS_REGION || 'us-east-1';
-  
-  for (const secretName of possibleSecretNames) {
-    try {
-      // Use default credential chain (IAM role in Lambda, or env vars locally)
-      const client = new SecretsManagerClient({
-        region,
-        // Don't specify credentials - let it use IAM role in Lambda or default chain
-      });
-
-      const response = await client.send(
-        new GetSecretValueCommand({ SecretId: secretName })
-      );
-
-      if (!response.SecretString) {
-        continue;
-      }
-
-      const secret = JSON.parse(response.SecretString);
-      const result = {
-        accessKeyId: secret.AWS_ACCESS_KEY_ID || secret.accessKeyId,
-        secretAccessKey: secret.AWS_SECRET_ACCESS_KEY || secret.secretAccessKey,
-        region: secret.AWS_REGION || secret.region || region,
-      };
-      
-      if (result.accessKeyId && result.secretAccessKey) {
-        logger.debug('[DynamoDB] Found credentials in Secrets Manager', { secretName });
-        return result;
-      }
-    } catch (error: any) {
-      // If secret doesn't exist, try next name
-      if (error.name === 'ResourceNotFoundException') {
-        logger.debug(`[DynamoDB] Secret not found: ${secretName}, trying next...`);
-        continue;
-      }
-      logger.debug(`[DynamoDB] Failed to get secret ${secretName}:`, error);
-    }
-  }
-  
-  return null;
-}
-
-async function getCredentials(): Promise<{ accessKeyId: string; secretAccessKey: string; region?: string }> {
-  let accessKeyId: string | undefined;
-  let secretAccessKey: string | undefined;
-  let region: string | undefined;
-  let source = 'unknown';
-
+function getCredentials(): { accessKeyId: string; secretAccessKey: string; region: string } {
   // Use cached credentials if available
   if (credentialsCache) {
-    accessKeyId = credentialsCache.accessKeyId;
-    secretAccessKey = credentialsCache.secretAccessKey;
-    region = credentialsCache.region;
-    source = 'cache';
-  } else {
-    // Priority 1: Check environment variables first
-    // Amplify Secrets are injected as environment variables at runtime
-    accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-    secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-    region = process.env.AWS_REGION;
-    
-    if (accessKeyId && secretAccessKey) {
-      source = 'environment';
-      // Cache for future use
-      credentialsCache = { accessKeyId, secretAccessKey, region };
-    } else {
-      // Priority 2: Fall back to Secrets Manager (for custom setups)
-      logger.debug('[DynamoDB] No env vars found, trying Secrets Manager');
-      const secrets = await getCredentialsFromSecretsManager();
-      if (secrets) {
-        credentialsCache = secrets;
-        accessKeyId = secrets.accessKeyId;
-        secretAccessKey = secrets.secretAccessKey;
-        region = secrets.region;
-        source = 'secrets-manager';
-      }
-    }
+    return credentialsCache;
   }
+
+  // Get credentials from environment variables
+  // Use DYNAMODB_ prefix to avoid conflicts with AWS SDK's reserved AWS_ prefix
+  const accessKeyId = process.env.DYNAMODB_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.DYNAMODB_SECRET_ACCESS_KEY;
+  const region = process.env.DYNAMODB_REGION || 'us-east-1';
 
   if (!accessKeyId || !secretAccessKey) {
-    throw new Error('AWS credentials not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in Amplify Secrets (or environment variables)');
+    throw new Error('AWS credentials not configured. Set DYNAMODB_ACCESS_KEY_ID and DYNAMODB_SECRET_ACCESS_KEY environment variables.');
   }
 
-  logger.debug('[DynamoDB] Using credentials', {
-    source,
+  // Validate credentials format
+  if (!accessKeyId.startsWith('AKIA') && !accessKeyId.startsWith('ASIA')) {
+    throw new Error('Invalid DYNAMODB_ACCESS_KEY_ID format. It should start with AKIA or ASIA.');
+  }
+
+  logger.debug('[DynamoDB] Using credentials from environment variables', {
     hasAccessKey: !!accessKeyId,
     hasSecretKey: !!secretAccessKey,
-    region: region || 'us-east-1',
-    accessKeyPrefix: accessKeyId?.substring(0, 8) + '...',
+    region,
+    accessKeyPrefix: accessKeyId.substring(0, 8) + '...',
   });
 
-  return { accessKeyId, secretAccessKey, region };
+  // Cache for future use
+  credentialsCache = { accessKeyId, secretAccessKey, region };
+  return credentialsCache;
 }
 
 export async function initializeDynamoDB(): Promise<void> {
@@ -131,8 +60,7 @@ export async function initializeDynamoDB(): Promise<void> {
   // Start initialization
   initializationPromise = (async () => {
     try {
-      const { accessKeyId, secretAccessKey, region: credRegion } = await getCredentials();
-      const region = credRegion || process.env.AWS_REGION || 'us-east-1';
+      const { accessKeyId, secretAccessKey, region } = getCredentials();
 
       const client = new DynamoDBClient({
         region,
@@ -172,7 +100,7 @@ export async function initializeDynamoDB(): Promise<void> {
 
 async function getDynamoDB(): Promise<DynamoDBDocumentClient> {
   // Check if credentials have changed (if we have cached credentials)
-  const currentAccessKey = process.env.AWS_ACCESS_KEY_ID;
+  const currentAccessKey = process.env.DYNAMODB_ACCESS_KEY_ID;
   if (credentialsCache && currentAccessKey && credentialsCache.accessKeyId !== currentAccessKey) {
     logger.debug('[DynamoDB] Credentials changed, clearing cache');
     credentialsCache = null;

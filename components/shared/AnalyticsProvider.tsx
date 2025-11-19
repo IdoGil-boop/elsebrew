@@ -9,6 +9,18 @@ export default function AnalyticsProvider() {
   const pathname = usePathname();
   const GA4_ID = process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID;
 
+  // Initialize dataLayer immediately (before scripts load) so events can queue
+  useEffect(() => {
+    if (GA4_ID && typeof window !== 'undefined') {
+      window.dataLayer = window.dataLayer || [];
+      window.gtag = window.gtag || function(...args: any[]) {
+        window.dataLayer!.push(args);
+      };
+      window.gtag('js', new Date());
+      window.gtag('config', GA4_ID);
+    }
+  }, [GA4_ID]);
+
   useEffect(() => {
     if (pathname) {
       trackPageView(pathname);
@@ -26,14 +38,6 @@ export default function AnalyticsProvider() {
         src={`https://www.googletagmanager.com/gtag/js?id=${GA4_ID}`}
         strategy="afterInteractive"
       />
-      <Script id="google-analytics" strategy="afterInteractive">
-        {`
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          gtag('js', new Date());
-          gtag('config', '${GA4_ID}');
-        `}
-      </Script>
     </>
   );
 }

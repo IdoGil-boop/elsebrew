@@ -6,13 +6,13 @@ import { DynamoDBClient, ListTablesCommand } from '@aws-sdk/client-dynamodb';
 config({ path: resolve(process.cwd(), '.env.local') });
 
 async function testCredentials() {
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-  const region = process.env.AWS_REGION || 'us-east-1';
+  const accessKeyId = process.env.DYNAMODB_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.DYNAMODB_SECRET_ACCESS_KEY;
+  const region = process.env.DYNAMODB_REGION || 'us-east-1';
 
   if (!accessKeyId || !secretAccessKey) {
     console.error('❌ AWS credentials not found in environment variables');
-    console.log('Make sure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set');
+    console.log('Make sure DYNAMODB_ACCESS_KEY_ID and DYNAMODB_SECRET_ACCESS_KEY are set');
     process.exit(1);
   }
 

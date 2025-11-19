@@ -14,10 +14,10 @@ export async function GET(request: NextRequest) {
   try {
     // Check if AWS is configured
     const isAwsConfigured =
-      process.env.AWS_ACCESS_KEY_ID &&
-      process.env.AWS_ACCESS_KEY_ID !== 'your_aws_access_key_here' &&
-      process.env.AWS_SECRET_ACCESS_KEY &&
-      process.env.AWS_SECRET_ACCESS_KEY !== 'your_aws_secret_key_here';
+      process.env.DYNAMODB_ACCESS_KEY_ID &&
+      process.env.DYNAMODB_ACCESS_KEY_ID !== 'your_aws_access_key_here' &&
+      process.env.DYNAMODB_SECRET_ACCESS_KEY &&
+      process.env.DYNAMODB_SECRET_ACCESS_KEY !== 'your_aws_secret_key_here';
 
     if (!isAwsConfigured) {
       // Return empty array - client will use localStorage
@@ -49,10 +49,10 @@ export async function POST(request: NextRequest) {
 
     // Check if AWS is configured
     const isAwsConfigured =
-      process.env.AWS_ACCESS_KEY_ID &&
-      process.env.AWS_ACCESS_KEY_ID !== 'your_aws_access_key_here' &&
-      process.env.AWS_SECRET_ACCESS_KEY &&
-      process.env.AWS_SECRET_ACCESS_KEY !== 'your_aws_secret_key_here';
+      process.env.DYNAMODB_ACCESS_KEY_ID &&
+      process.env.DYNAMODB_ACCESS_KEY_ID !== 'your_aws_access_key_here' &&
+      process.env.DYNAMODB_SECRET_ACCESS_KEY &&
+      process.env.DYNAMODB_SECRET_ACCESS_KEY !== 'your_aws_secret_key_here';
 
     if (!isAwsConfigured) {
       console.log('[API] AWS not configured - returning success (client will use localStorage)');
@@ -115,10 +115,10 @@ export async function DELETE(request: NextRequest) {
 
     // Check if AWS is configured
     const isAwsConfigured =
-      process.env.AWS_ACCESS_KEY_ID &&
-      process.env.AWS_ACCESS_KEY_ID !== 'your_aws_access_key_here' &&
-      process.env.AWS_SECRET_ACCESS_KEY &&
-      process.env.AWS_SECRET_ACCESS_KEY !== 'your_aws_secret_key_here';
+      process.env.DYNAMODB_ACCESS_KEY_ID &&
+      process.env.DYNAMODB_ACCESS_KEY_ID !== 'your_aws_access_key_here' &&
+      process.env.DYNAMODB_SECRET_ACCESS_KEY &&
+      process.env.DYNAMODB_SECRET_ACCESS_KEY !== 'your_aws_secret_key_here';
 
     if (!isAwsConfigured) {
       // Return success - client-side will handle localStorage deletion
