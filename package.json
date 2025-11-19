@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "check-env": "node check-env.js",
-    "setup-db": "tsx scripts/create-dynamodb-tables.ts"
+    "setup-db": "tsx scripts/create-dynamodb-tables.ts",
+    "test-aws": "tsx scripts/test-aws-credentials.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.932.0",

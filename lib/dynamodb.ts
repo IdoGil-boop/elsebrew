@@ -6,61 +6,110 @@ import { logger } from './logger';
 // Lazy initialization of DynamoDB client
 let dynamoDB: DynamoDBDocumentClient | null = null;
 let initializationError: Error | null = null;
-let credentialsCache: { accessKeyId: string; secretAccessKey: string } | null = null;
+let credentialsCache: { accessKeyId: string; secretAccessKey: string; region?: string } | null = null;
 let initializationPromise: Promise<void> | null = null;
 
-async function getCredentialsFromSecretsManager(): Promise<{ accessKeyId: string; secretAccessKey: string } | null> {
-  const secretName = process.env.AWS_SECRETS_MANAGER_SECRET_NAME || 'elsebrew/aws-credentials';
+async function getCredentialsFromSecretsManager(): Promise<{ accessKeyId: string; secretAccessKey: string; region?: string } | null> {
+  // Try multiple possible secret names/patterns
+  const possibleSecretNames = [
+    process.env.AWS_SECRETS_MANAGER_SECRET_NAME,
+    'amplify/elsebrew/aws-credentials',
+    'elsebrew/aws-credentials',
+    'aws-credentials',
+  ].filter(Boolean) as string[];
   
-  try {
-    // Use default credential chain (IAM role in Lambda, or env vars locally)
-    const client = new SecretsManagerClient({
-      region: process.env.AWS_REGION || 'us-east-1',
-      // Don't specify credentials - let it use IAM role in Lambda or default chain
-    });
+  const region = process.env.AWS_REGION || 'us-east-1';
+  
+  for (const secretName of possibleSecretNames) {
+    try {
+      // Use default credential chain (IAM role in Lambda, or env vars locally)
+      const client = new SecretsManagerClient({
+        region,
+        // Don't specify credentials - let it use IAM role in Lambda or default chain
+      });
 
-    const response = await client.send(
-      new GetSecretValueCommand({ SecretId: secretName })
-    );
+      const response = await client.send(
+        new GetSecretValueCommand({ SecretId: secretName })
+      );
 
-    if (!response.SecretString) {
-      return null;
+      if (!response.SecretString) {
+        continue;
+      }
+
+      const secret = JSON.parse(response.SecretString);
+      const result = {
+        accessKeyId: secret.AWS_ACCESS_KEY_ID || secret.accessKeyId,
+        secretAccessKey: secret.AWS_SECRET_ACCESS_KEY || secret.secretAccessKey,
+        region: secret.AWS_REGION || secret.region || region,
+      };
+      
+      if (result.accessKeyId && result.secretAccessKey) {
+        logger.debug('[DynamoDB] Found credentials in Secrets Manager', { secretName });
+        return result;
+      }
+    } catch (error: any) {
+      // If secret doesn't exist, try next name
+      if (error.name === 'ResourceNotFoundException') {
+        logger.debug(`[DynamoDB] Secret not found: ${secretName}, trying next...`);
+        continue;
+      }
+      logger.debug(`[DynamoDB] Failed to get secret ${secretName}:`, error);
     }
-
-    const secret = JSON.parse(response.SecretString);
-    return {
-      accessKeyId: secret.AWS_ACCESS_KEY_ID || secret.accessKeyId,
-      secretAccessKey: secret.AWS_SECRET_ACCESS_KEY || secret.secretAccessKey,
-    };
-  } catch (error) {
-    logger.debug('[DynamoDB] Failed to get credentials from Secrets Manager:', error);
-    return null;
   }
+  
+  return null;
 }
 
-async function getCredentials(): Promise<{ accessKeyId: string; secretAccessKey: string }> {
-  // Check environment variables first
-  let accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  let secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+async function getCredentials(): Promise<{ accessKeyId: string; secretAccessKey: string; region?: string }> {
+  let accessKeyId: string | undefined;
+  let secretAccessKey: string | undefined;
+  let region: string | undefined;
+  let source = 'unknown';
 
-  // If not in env vars, try Secrets Manager
-  if ((!accessKeyId || !secretAccessKey) && !credentialsCache) {
-    const secrets = await getCredentialsFromSecretsManager();
-    if (secrets) {
-      credentialsCache = secrets;
-      accessKeyId = secrets.accessKeyId;
-      secretAccessKey = secrets.secretAccessKey;
-    }
-  } else if (credentialsCache) {
+  // Use cached credentials if available
+  if (credentialsCache) {
     accessKeyId = credentialsCache.accessKeyId;
     secretAccessKey = credentialsCache.secretAccessKey;
+    region = credentialsCache.region;
+    source = 'cache';
+  } else {
+    // Priority 1: Check environment variables first
+    // Amplify Secrets are injected as environment variables at runtime
+    accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+    secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+    region = process.env.AWS_REGION;
+    
+    if (accessKeyId && secretAccessKey) {
+      source = 'environment';
+      // Cache for future use
+      credentialsCache = { accessKeyId, secretAccessKey, region };
+    } else {
+      // Priority 2: Fall back to Secrets Manager (for custom setups)
+      logger.debug('[DynamoDB] No env vars found, trying Secrets Manager');
+      const secrets = await getCredentialsFromSecretsManager();
+      if (secrets) {
+        credentialsCache = secrets;
+        accessKeyId = secrets.accessKeyId;
+        secretAccessKey = secrets.secretAccessKey;
+        region = secrets.region;
+        source = 'secrets-manager';
+      }
+    }
   }
 
   if (!accessKeyId || !secretAccessKey) {
-    throw new Error('AWS credentials not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in environment variables or AWS Secrets Manager');
+    throw new Error('AWS credentials not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in Amplify Secrets (or environment variables)');
   }
 
-  return { accessKeyId, secretAccessKey };
+  logger.debug('[DynamoDB] Using credentials', {
+    source,
+    hasAccessKey: !!accessKeyId,
+    hasSecretKey: !!secretAccessKey,
+    region: region || 'us-east-1',
+    accessKeyPrefix: accessKeyId?.substring(0, 8) + '...',
+  });
+
+  return { accessKeyId, secretAccessKey, region };
 }
 
 export async function initializeDynamoDB(): Promise<void> {
@@ -82,8 +131,8 @@ export async function initializeDynamoDB(): Promise<void> {
   // Start initialization
   initializationPromise = (async () => {
     try {
-      const { accessKeyId, secretAccessKey } = await getCredentials();
-      const region = process.env.AWS_REGION || 'us-east-1';
+      const { accessKeyId, secretAccessKey, region: credRegion } = await getCredentials();
+      const region = credRegion || process.env.AWS_REGION || 'us-east-1';
 
       const client = new DynamoDBClient({
         region,
@@ -100,9 +149,20 @@ export async function initializeDynamoDB(): Promise<void> {
 
       dynamoDB = DynamoDBDocumentClient.from(client);
       logger.debug('[DynamoDB] Client initialized successfully');
-    } catch (error) {
+    } catch (error: any) {
       initializationError = error as Error;
       logger.error('[DynamoDB] Failed to initialize client:', error);
+      
+      // If credentials are invalid, clear everything so we can retry with fresh credentials
+      if (error?.name === 'UnrecognizedClientException' || 
+          error?.__type === 'com.amazon.coral.service#UnrecognizedClientException') {
+        logger.warn('[DynamoDB] Invalid credentials detected, clearing cache and error state');
+        credentialsCache = null;
+        dynamoDB = null;
+        initializationError = null; // Clear error so we can retry
+        initializationPromise = null; // Clear promise so we can retry
+      }
+      
       throw error;
     }
   })();
@@ -111,6 +171,16 @@ export async function initializeDynamoDB(): Promise<void> {
 }
 
 async function getDynamoDB(): Promise<DynamoDBDocumentClient> {
+  // Check if credentials have changed (if we have cached credentials)
+  const currentAccessKey = process.env.AWS_ACCESS_KEY_ID;
+  if (credentialsCache && currentAccessKey && credentialsCache.accessKeyId !== currentAccessKey) {
+    logger.debug('[DynamoDB] Credentials changed, clearing cache');
+    credentialsCache = null;
+    dynamoDB = null;
+    initializationError = null;
+    initializationPromise = null;
+  }
+
   // If we previously failed to initialize, throw the same error
   if (initializationError) {
     throw initializationError;

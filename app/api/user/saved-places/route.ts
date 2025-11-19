@@ -113,11 +113,36 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'placeId is required' }, { status: 400 });
     }
 
-    await deleteSavedPlace(auth.user.sub, placeId);
-    // Also update place interactions to mark as unsaved
-    await markPlaceAsUnsaved(auth.user.sub, placeId);
+    // Check if AWS is configured
+    const isAwsConfigured =
+      process.env.AWS_ACCESS_KEY_ID &&
+      process.env.AWS_ACCESS_KEY_ID !== 'your_aws_access_key_here' &&
+      process.env.AWS_SECRET_ACCESS_KEY &&
+      process.env.AWS_SECRET_ACCESS_KEY !== 'your_aws_secret_key_here';
 
-    return NextResponse.json({ success: true });
+    if (!isAwsConfigured) {
+      // Return success - client-side will handle localStorage deletion
+      return NextResponse.json({
+        success: true,
+        localStorage: true,
+        message: 'Deleted from browser storage. Configure AWS to sync across devices.'
+      });
+    }
+
+    try {
+      await deleteSavedPlace(auth.user.sub, placeId);
+      // Also update place interactions to mark as unsaved
+      await markPlaceAsUnsaved(auth.user.sub, placeId);
+      return NextResponse.json({ success: true });
+    } catch (dbError: any) {
+      // If DynamoDB fails (invalid credentials, table doesn't exist, etc.)
+      console.error('DynamoDB error, using localStorage fallback:', dbError.message);
+      return NextResponse.json({
+        success: true,
+        localStorage: true,
+        message: 'Deleted from browser storage. AWS credentials invalid or tables not created.'
+      });
+    }
   } catch (error) {
     console.error('Error deleting saved place:', error);
     return NextResponse.json({ error: 'Failed to delete saved place' }, { status: 500 });
