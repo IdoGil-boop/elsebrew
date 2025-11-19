@@ -28,9 +28,9 @@ export default function ResultsList({
     const checkSaved = async () => {
       const saved = new Set<string>();
       for (const result of results) {
-        const isSaved = await storage.isPlaceSaved(result.place.place_id);
+        const isSaved = await storage.isPlaceSaved(result.place.id);
         if (isSaved) {
-          saved.add(result.place.place_id);
+          saved.add(result.place.id);
         }
       }
       setSavedPlaceIds(saved);
@@ -44,7 +44,17 @@ export default function ResultsList({
     }
     // Otherwise use Google Maps photos
     if (place.photos && place.photos.length > 0) {
-      return place.photos[0].getUrl({ maxWidth: 400 });
+      try {
+        const photo = place.photos[0] as any;
+        // Try new API first (getURI), then fallback to legacy (getUrl)
+        if (typeof photo.getURI === 'function') {
+          return photo.getURI({ maxWidth: 400 });
+        } else if (typeof photo.getUrl === 'function') {
+          return photo.getUrl({ maxWidth: 400 });
+        }
+      } catch (error) {
+        console.warn('Error getting photo URL:', error);
+      }
     }
     return null;
   };
@@ -63,7 +73,7 @@ export default function ResultsList({
 
         return (
           <motion.div
-            key={result.place.place_id}
+            key={result.place.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: index * 0.05 }}
@@ -75,7 +85,7 @@ export default function ResultsList({
               onSelectResult(result, index);
               analytics.resultClick({
                 rank: index + 1,
-                place_id: result.place.place_id,
+                place_id: result.place.id,
               });
             }}
             onMouseEnter={() => onHover(index)}
@@ -87,7 +97,7 @@ export default function ResultsList({
                 <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
                   <img
                     src={photoUrl}
-                    alt={result.place.name}
+                    alt={result.place.displayName}
                     className="w-full h-full object-cover"
                   />
                 </div>
@@ -98,9 +108,9 @@ export default function ResultsList({
                 <div className="flex items-start justify-between mb-1">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <h3 className="font-semibold text-lg truncate">
-                      {index + 1}. {result.place.name}
+                      {index + 1}. {result.place.displayName}
                     </h3>
-                    {savedPlaceIds.has(result.place.place_id) && (
+                    {savedPlaceIds.has(result.place.id) && (
                       <span className="flex-shrink-0 text-espresso" title="Saved">
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
@@ -120,20 +130,20 @@ export default function ResultsList({
 
                 {/* Tags */}
                 <div className="flex flex-wrap gap-2 mb-2">
-                  {result.place.price_level && (
+                  {result.place.priceLevel && (
                     <span className="text-xs px-2 py-1 bg-gray-100 rounded-full">
-                      {getPriceLevel(result.place.price_level)}
+                      {getPriceLevel(result.place.priceLevel)}
                     </span>
                   )}
-                  {result.place.opening_hours?.isOpen?.() !== undefined && (
+                  {result.place.regularOpeningHours?.isOpen?.() !== undefined && (
                     <span
                       className={`text-xs px-2 py-1 rounded-full ${
-                        result.place.opening_hours.isOpen()
+                        result.place.regularOpeningHours.isOpen()
                           ? 'bg-green-100 text-green-700'
                           : 'bg-red-100 text-red-700'
                       }`}
                     >
-                      {result.place.opening_hours.isOpen() ? 'Open now' : 'Closed'}
+                      {result.place.regularOpeningHours.isOpen() ? 'Open now' : 'Closed'}
                     </span>
                   )}
                   {result.distanceToCenter && (

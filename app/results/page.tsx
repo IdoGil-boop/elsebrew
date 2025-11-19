@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { CafeMatch, PlaceBasicInfo, VibeToggles } from '@/types';
 import { loadGoogleMaps } from '@/lib/maps-loader';
-import { searchCafes } from '@/lib/places-search';
+import { searchCafes, SearchCafesResult } from '@/lib/places-search';
 import { analytics } from '@/lib/analytics';
 import { extractKeywordsFromMultipleCafes, processFreeTextWithAI } from '@/lib/keyword-extraction';
 import ResultsList from '@/components/results/ResultsList';
@@ -14,6 +14,7 @@ import DetailsDrawer from '@/components/results/DetailsDrawer';
 import RefineSearchModal from '@/components/results/RefineSearchModal';
 import Toast from '@/components/shared/Toast';
 import { getAuthToken, storage } from '@/lib/storage';
+import { generateSearchId, saveCompleteSearchState } from '@/lib/search-state-manager';
 
 function ResultsContent() {
   const searchParams = useSearchParams();
@@ -32,6 +33,29 @@ function ResultsContent() {
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
   const [showToast, setShowToast] = useState(false);
 
+  // Pagination state
+  const [currentSearchId, setCurrentSearchId] = useState<string>('');
+  const [allCachedResults, setAllCachedResults] = useState<CafeMatch[]>([]);
+  const [hasMorePages, setHasMorePages] = useState(false);
+  const [nextPageToken, setNextPageToken] = useState<string | undefined>();
+
+  // Ref to prevent duplicate searches in React Strict Mode
+  const isSearchInProgress = useRef(false);
+
+  // Helper to get photo URL from new or legacy Google Places API
+  const getPhotoUrl = (photo: any, maxWidth: number): string | undefined => {
+    try {
+      if (typeof photo.getURI === 'function') {
+        return photo.getURI({ maxWidth });
+      } else if (typeof photo.getUrl === 'function') {
+        return photo.getUrl({ maxWidth });
+      }
+    } catch (error) {
+      console.warn('Error getting photo URL:', error);
+    }
+    return undefined;
+  };
+
   useEffect(() => {
     const currentSearch = searchParams.toString();
     const savedState = storage.getResultsState();
@@ -44,14 +68,15 @@ function ResultsContent() {
       // Restore cached results immediately
       const restoredResults: CafeMatch[] = savedState.results.map((r: any) => ({
         place: {
-          place_id: r.place.place_id,
-          name: r.place.name,
-          formatted_address: r.place.formatted_address,
+          id: r.place.id,
+          displayName: r.place.displayName,
+          formattedAddress: r.place.formattedAddress,
           rating: r.place.rating,
-          user_ratings_total: r.place.user_ratings_total,
-          price_level: r.place.price_level,
+          userRatingCount: r.place.userRatingCount,
+          priceLevel: r.place.priceLevel,
           types: r.place.types,
-          editorial_summary: r.place.editorial_summary,
+          primaryType: r.place.primaryType,
+          editorialSummary: r.place.editorialSummary,
           photoUrl: r.place.photoUrl, // Include cached photo URL
         } as PlaceBasicInfo,
         score: r.score,
@@ -66,17 +91,21 @@ function ResultsContent() {
         setMapCenter(savedState.mapCenter);
       }
       setIsLoading(false);
-      // Clear the saved state after restoring
-      storage.setResultsState(null);
+      // DON'T clear the saved state - keep it for future back/forward navigation
+      // storage.setResultsState(null);
       return; // Don't run the search again
     }
     
-    // New search or params changed - reset state
+    // New search or params changed - reset state and clear old cache
     setIsLoading(true);
     setError(null);
     setResults([]);
     setSelectedResult(null);
     setSelectedIndex(null);
+    // Clear any old cached results since this is a new search
+    if (savedState && savedState.searchParams !== currentSearch) {
+      storage.setResultsState(null);
+    }
 
     // Debug: Check auth state on results page load
     const userProfile = storage.getUserProfile();
@@ -87,8 +116,15 @@ function ResultsContent() {
       tokenLength: userProfile?.token?.length,
     });
 
+    // Prevent duplicate searches in React Strict Mode
+    if (isSearchInProgress.current) {
+      console.log('[Results Page] Search already in progress, skipping duplicate');
+      return;
+    }
+
     const performSearch = async () => {
       const startTime = Date.now();
+      isSearchInProgress.current = true;
 
       try {
         // Support both old (single cafe) and new (multiple cafes) params
@@ -105,9 +141,8 @@ function ResultsContent() {
         }
 
         const vibes: VibeToggles = JSON.parse(vibesParam);
-        const google = await loadGoogleMaps();
 
-        // Parse source place IDs (support both single and multiple)
+        // Parse source place IDs early (needed for search ID generation)
         let sourcePlaceIds: string[] = [];
         if (sourcePlaceIdsParam) {
           sourcePlaceIds = JSON.parse(sourcePlaceIdsParam);
@@ -120,6 +155,99 @@ function ResultsContent() {
           setError('No source cafes specified');
           setIsLoading(false);
           return;
+        }
+
+        // Generate search ID to check for cached results
+        const searchId = generateSearchId(
+          sourcePlaceIds,
+          destCity,
+          vibes,
+          freeText || undefined
+        );
+
+        // If this is a refinement, try to serve next batch from cache first
+        if (isRefinement) {
+          console.log('[Results] Refinement detected, checking for cached results...');
+          try {
+            const authToken = getAuthToken();
+            const headers: HeadersInit = {};
+            if (authToken) {
+              headers['Authorization'] = `Bearer ${authToken}`;
+            }
+
+            const cacheResponse = await fetch(
+              `/api/search-state?searchId=${encodeURIComponent(searchId)}`,
+              { headers }
+            );
+
+            if (cacheResponse.ok) {
+              const { searchState } = await cacheResponse.json();
+
+              if (searchState && searchState.allResults) {
+                const shownIds = new Set(searchState.shownPlaceIds || []);
+                const unseenResults = searchState.allResults.filter(
+                  (r: any) => !shownIds.has(r.placeId)
+                );
+
+                if (unseenResults.length > 0) {
+                  console.log(`[Results] Found ${unseenResults.length} cached unseen results, serving next batch`);
+
+                  // Serve next 5 unseen results
+                  const nextBatch = unseenResults.slice(0, 5);
+
+                  // Reconstruct CafeMatch objects (without full place details for now)
+                  // We'll need to fetch full details if needed, but for now just show what we have
+                  const cachedMatches: CafeMatch[] = nextBatch.map((r: any) => ({
+                    place: {
+                      id: r.placeId,
+                      displayName: r.name,
+                    } as PlaceBasicInfo,
+                    score: r.score,
+                    matchedKeywords: [],
+                    reasoning: 'From your previous search results',
+                  }));
+
+                  setResults(cachedMatches);
+                  setCurrentSearchId(searchId);
+                  setIsLoading(false);
+
+                  // Mark these as shown
+                  const newlyShownIds = nextBatch.map((r: any) => r.placeId);
+                  const updatedShownIds = [...Array.from(shownIds), ...newlyShownIds];
+
+                  fetch('/api/search-state', {
+                    method: 'PATCH',
+                    headers: {
+                      ...headers,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      searchId,
+                      updates: {
+                        shownPlaceIds: updatedShownIds,
+                      },
+                    }),
+                  }).catch(err => console.warn('[Results] Failed to update shown IDs:', err));
+
+                  return; // Exit early, don't call Google
+                }
+              }
+            }
+
+            console.log('[Results] No cached results available, fetching from Google...');
+          } catch (cacheError) {
+            console.warn('[Results] Failed to check cache:', cacheError);
+            // Continue to Google fetch
+          }
+        }
+
+        // Load Google Maps with better error handling
+        let google;
+        try {
+          google = await loadGoogleMaps();
+        } catch (mapError) {
+          console.error('[Results] Failed to load Google Maps:', mapError);
+          throw new Error('Failed to load Google Maps. Please check your API key configuration.');
         }
 
         // Get details for all source places
@@ -145,19 +273,29 @@ function ResultsContent() {
               },
               (place, status) => {
                 if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+                  // For origin places, extract primaryType from types array
+                  // (The legacy API doesn't have primaryType, but we can use the first type as a proxy)
+                  const primaryType = place.types && place.types.length > 0 ? place.types[0] : undefined;
+
                   resolve({
-                    place_id: place.place_id!,
-                    name: place.name!,
+                    id: place.place_id!,
+                    displayName: place.name!,
                     types: place.types,
+                    primaryType: primaryType,
                     rating: place.rating,
-                    user_ratings_total: place.user_ratings_total,
-                    price_level: place.price_level,
-                    opening_hours: place.opening_hours,
+                    userRatingCount: place.user_ratings_total,
+                    priceLevel: place.price_level,
+                    regularOpeningHours: place.opening_hours,
                     photos: place.photos,
-                    editorial_summary: (place as any).editorial_summary?.overview,
+                    editorialSummary: (place as any).editorial_summary?.overview,
                   });
                 } else {
-                  reject(new Error('Failed to get source place details'));
+                  console.error('[Results] getPlaceDetails failed', {
+                    placeId,
+                    status,
+                    statusName: google.maps.places.PlacesServiceStatus[status],
+                  });
+                  reject(new Error(`Failed to get source place details: ${status} (${google.maps.places.PlacesServiceStatus[status] || 'Unknown status'})`));
                 }
               }
             );
@@ -177,9 +315,11 @@ function ResultsContent() {
           throw new Error('Failed to geocode destination');
         }
 
-        const destGeometry = geocodeResult.results[0].geometry;
+        const destResult = geocodeResult.results[0];
+        const destGeometry = destResult.geometry;
         const destCenter = destGeometry.location;
         const destBounds = destGeometry.viewport;
+        const destTypes = destResult.types || [];
 
         setMapCenter({
           lat: destCenter.lat(),
@@ -210,16 +350,66 @@ function ResultsContent() {
           ].slice(0, 5);
         }
 
+        // Get places to filter out (seen but not saved)
+        // Works for both logged-in users (by userId) and anonymous users (by IP)
+        let placeIdsToFilter: string[] = [];
+        try {
+          const vibesArray = Object.entries(vibes)
+            .filter(([_, enabled]) => enabled)
+            .map(([vibe]) => vibe);
+
+          const authToken = getAuthToken();
+          const headers: HeadersInit = {};
+          if (authToken) {
+            headers['Authorization'] = `Bearer ${authToken}`;
+          }
+
+          const filterResponse = await fetch(
+            `/api/user/place-interactions/filter?` +
+              new URLSearchParams({
+                destination: destCity,
+                vibes: JSON.stringify(vibesArray),
+                freeText: freeText || '',
+                originPlaceIds: JSON.stringify(sourcePlaceIds),
+              }).toString(),
+            { headers }
+          );
+
+          if (filterResponse.ok) {
+            const data = await filterResponse.json();
+            placeIdsToFilter = data.placeIdsToFilter || [];
+            console.log('[Results] Filtering out seen places:', placeIdsToFilter.length);
+          }
+        } catch (error) {
+          console.warn('[Results] Failed to fetch filter list:', error);
+          // Continue without filtering
+        }
+
+        // Set the search ID (already generated earlier)
+        const vibesArray = Object.entries(vibes)
+          .filter(([_, enabled]) => enabled)
+          .map(([vibe]) => vibe);
+        setCurrentSearchId(searchId);
+
         // Search for matching cafes
-        const matches = await searchCafes(
+        const searchResult: SearchCafesResult = await searchCafes(
           google,
           sourcePlace,
           destCenter,
           destBounds,
           vibes,
           customKeywords,
-          isRefinement // Pass refinement flag
+          isRefinement, // Pass refinement flag
+          destTypes, // Pass destination types to determine if it's an area or point
+          destResult.place_id, // Pass destination place ID for boundary verification
+          sourcePlaces, // Pass all origin places for type overlap scoring
+          placeIdsToFilter // Pass places to filter out
         );
+
+        const matches = searchResult.results; // Top 5 for display
+        setAllCachedResults(searchResult.allScoredResults); // Store all results
+        setHasMorePages(searchResult.hasMorePages);
+        setNextPageToken(searchResult.nextPageToken);
 
         // Fetch image analysis for all matches in parallel with timeout
         const matchesWithData = await Promise.all(
@@ -240,15 +430,17 @@ function ResultsContent() {
             const imageAnalysis = await fetchWithTimeout(
               (async () => {
                 if (match.place.photos && match.place.photos.length > 0) {
-                  const photoUrl = match.place.photos[0].getUrl({ maxWidth: 800 });
-                  const response = await fetch('/api/analyze-image', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ imageUrl: photoUrl }),
-                  });
-                  if (response.ok) {
-                    const data = await response.json();
-                    return data.analysis;
+                  const photoUrl = getPhotoUrl(match.place.photos[0], 800);
+                  if (photoUrl) {
+                    const response = await fetch('/api/analyze-image', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ imageUrl: photoUrl }),
+                    });
+                    if (response.ok) {
+                      const data = await response.json();
+                      return data.analysis;
+                    }
                   }
                 }
                 return undefined;
@@ -271,18 +463,40 @@ function ResultsContent() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               source: {
-                name: sourcePlace.name,
-                price_level: sourcePlace.price_level,
+                name: sourcePlace.displayName,
+                price_level: sourcePlace.priceLevel,
                 rating: sourcePlace.rating,
               },
               candidates: matchesWithData.map(match => ({
-                name: match.place.name,
-                price_level: match.place.price_level,
+                name: match.place.displayName,
+                price_level: match.place.priceLevel,
                 rating: match.place.rating,
-                user_ratings_total: match.place.user_ratings_total,
-                editorial_summary: match.place.editorial_summary,
+                user_ratings_total: match.place.userRatingCount,
+                editorial_summary: match.place.editorialSummary,
                 keywords: match.matchedKeywords,
                 imageAnalysis: match.imageAnalysis,
+                typeOverlapDetails: match.typeOverlapDetails,
+                // Atmosphere & Amenities
+                outdoorSeating: match.place.outdoorSeating,
+                takeout: match.place.takeout,
+                delivery: match.place.delivery,
+                dineIn: match.place.dineIn,
+                reservable: match.place.reservable,
+                goodForGroups: match.place.goodForGroups,
+                goodForChildren: match.place.goodForChildren,
+                goodForWatchingSports: match.place.goodForWatchingSports,
+                liveMusic: match.place.liveMusic,
+                servesCoffee: match.place.servesCoffee,
+                servesBreakfast: match.place.servesBreakfast,
+                servesBrunch: match.place.servesBrunch,
+                servesLunch: match.place.servesLunch,
+                servesDinner: match.place.servesDinner,
+                servesBeer: match.place.servesBeer,
+                servesWine: match.place.servesWine,
+                servesVegetarianFood: match.place.servesVegetarianFood,
+                allowsDogs: match.place.allowsDogs,
+                restroom: match.place.restroom,
+                menuForChildren: match.place.menuForChildren,
               })),
               city: destCity,
               vibes: vibes,
@@ -301,7 +515,57 @@ function ResultsContent() {
         }
 
         setResults(matchesWithReasoning);
-        
+
+        // Save search state with pagination info
+        const originPlaceObjs = sourcePlaceIds.map((id, idx) => ({
+          placeId: id,
+          name: sourcePlaces[idx]?.displayName || 'Unknown',
+        }));
+
+        saveCompleteSearchState(
+          searchId,
+          originPlaceObjs,
+          destCity,
+          vibesArray,
+          freeText || undefined,
+          matchesWithReasoning,
+          searchResult.allScoredResults,
+          searchResult.hasMorePages,
+          searchResult.nextPageToken
+        ).catch(err => console.warn('[Results] Failed to save search state:', err));
+
+        // Record place views for all users (logged-in and anonymous)
+        if (matchesWithReasoning.length > 0) {
+          const searchContext = {
+            destination: destCity,
+            vibes: vibesArray,
+            freeText: freeText || undefined,
+            originPlaceIds: sourcePlaceIds,
+          };
+
+          const authToken = getAuthToken();
+          const headers: HeadersInit = {
+            'Content-Type': 'application/json',
+          };
+          if (authToken) {
+            headers['Authorization'] = `Bearer ${authToken}`;
+          }
+
+          // Record all views in parallel (fire and forget, don't wait)
+          matchesWithReasoning.forEach(match => {
+            fetch('/api/user/place-interactions', {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                action: 'view',
+                placeId: match.place.id,
+                placeName: match.place.displayName,
+                searchContext,
+              }),
+            }).catch(err => console.warn('[Results] Failed to record view:', err));
+          });
+        }
+
         // Remove refineSearch param from URL if it was a refinement
         if (isRefinement) {
           const newParams = new URLSearchParams(searchParams.toString());
@@ -309,7 +573,7 @@ function ResultsContent() {
           const newUrl = `/results?${newParams.toString()}`;
           router.replace(newUrl);
         }
-        
+
         // Store results state for navigation back from saved page (only if not a refinement)
         if (!isRefinement) {
           const currentSearch = searchParams.toString();
@@ -331,10 +595,17 @@ function ResultsContent() {
         console.error('Search error:', err);
         setError(err instanceof Error ? err.message : 'Search failed');
         setIsLoading(false);
+      } finally {
+        isSearchInProgress.current = false;
       }
     };
 
     performSearch();
+
+    // Cleanup function to reset the flag when searchParams change
+    return () => {
+      isSearchInProgress.current = false;
+    };
   }, [searchParams]);
 
   const handleSelectResult = (result: CafeMatch, index: number) => {
@@ -392,16 +663,26 @@ function ResultsContent() {
               'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify({
-              placeId: place.place_id,
-              name: place.name,
-              address: place.formatted_address || '',
+              placeId: place.id,
+              name: place.displayName,
+              address: place.formattedAddress || '',
               rating: place.rating,
-              priceLevel: place.price_level,
-              photoUrl: place.photoUrl || place.photos?.[0]?.getUrl({ maxWidth: 400 }),
+              priceLevel: place.priceLevel,
+              photoUrl: place.photoUrl || (place.photos?.[0] && getPhotoUrl(place.photos[0], 400)),
             }),
           })
         )
       );
+
+      // Check if any failed with 401 (token expired)
+      const unauthorized = responses.filter(r => r.status === 401);
+      if (unauthorized.length > 0) {
+        console.log('[SaveAll] Token expired - logging out user');
+        storage.setUserProfile(null);
+        showToastMessage('Your session has expired. Please sign in again.', 'info');
+        setIsSavingAll(false);
+        return;
+      }
 
       // Check if any failed
       const failed = responses.filter(r => !r.ok);
@@ -416,8 +697,8 @@ function ResultsContent() {
         // Save to localStorage
         results.forEach(({ place }) => {
           storage.saveCafe({
-            placeId: place.place_id!,
-            name: place.name!,
+            placeId: place.id!,
+            name: place.displayName!,
             savedAt: Date.now(),
             photoUrl: place.photoUrl || place.photos?.[0]?.getUrl({ maxWidth: 400 }),
             rating: place.rating,

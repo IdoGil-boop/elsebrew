@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { loadGoogleMaps } from '@/lib/maps-loader';
 import { VibeToggles } from '@/types';
 import { analytics } from '@/lib/analytics';
+import Toast from '@/components/shared/Toast';
 
 export default function SearchPanel() {
   const router = useRouter();
@@ -19,6 +20,8 @@ export default function SearchPanel() {
   const [freeText, setFreeText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [showToast, setShowToast] = useState(false);
 
   const [vibes, setVibes] = useState<VibeToggles>({
     roastery: false,
@@ -61,16 +64,37 @@ export default function SearchPanel() {
       }
 
       if (destInputRef.current) {
+        // Use types: ['(regions)'] which includes cities, neighborhoods, and addresses but not countries
+        // Combined with types: ['establishment'] for specific businesses like hotels
+        // However, since 'establishment' cannot be mixed, we'll use 'geocode' and filter client-side
+        const autocompleteOptions = {
+          types: ['(regions)'], // Includes cities, neighborhoods, but should exclude countries
+          fields: ['place_id', 'name', 'geometry', 'formatted_address', 'types'],
+        };
+
         const destAutocomplete = new google.maps.places.Autocomplete(
           destInputRef.current,
-          {
-            types: ['geocode', 'establishment'], // Allow cities, neighborhoods, streets, and establishments
-            fields: ['place_id', 'name', 'geometry', 'formatted_address', 'types'],
-          }
+          autocompleteOptions
         );
 
         destAutocomplete.addListener('place_changed', () => {
           const place = destAutocomplete.getPlace();
+
+          // Filter out countries and continents
+          const BLOCKED_TYPES = ['country', 'continent'];
+          const hasBlockedType = place.types?.some((type: string) => BLOCKED_TYPES.includes(type));
+
+          if (hasBlockedType) {
+            console.warn('[SearchPanel] Blocked destination type:', place.types);
+            setToastMessage('Oops! I still didn\'t get Elsebrew to support this large area, but I\'m working on it! Please try something a bit more specific like a city or neighborhood.');
+            setShowToast(true);
+            if (destInputRef.current) {
+              destInputRef.current.value = '';
+            }
+            setDestPlace(null);
+            return;
+          }
+
           setDestPlace(place);
         });
       }
@@ -115,6 +139,14 @@ export default function SearchPanel() {
       multi_cafe: sourcePlaces.length > 1,
       has_free_text: !!freeText,
     });
+
+    // Track additional events
+    if (sourcePlaces.length > 1) {
+      analytics.multiCafeSearch({ cafe_count: sourcePlaces.length });
+    }
+    if (freeText.trim()) {
+      analytics.freeTextSearch({ has_text: true });
+    }
 
     // Navigate to results with query params
     const params = new URLSearchParams({
@@ -283,6 +315,15 @@ export default function SearchPanel() {
           {isLoading ? 'Searching...' : 'Find my twins'}
         </button>
       </div>
+
+      {/* Toast notification */}
+      <Toast
+        message={toastMessage}
+        type="warning"
+        isVisible={showToast}
+        onClose={() => setShowToast(false)}
+        duration={5000}
+      />
     </motion.div>
   );
 }

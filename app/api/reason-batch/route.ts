@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Build the enhanced system prompt
-    const systemPrompt = `You are Elsebrew, an AI that matches coffee shops based on their characteristics, vibe, community reputation, and visual aesthetics.
+    const systemPrompt = `You are Elsebrew, an AI that matches coffee shops based on their characteristics, vibe, community reputation, visual aesthetics, and place type similarities.
 
 Your job is to create compelling, personality-rich explanations of why cafés match a source café.
 
@@ -31,13 +31,16 @@ CRITICAL REQUIREMENTS:
 1. Generate ${candidates.length} UNIQUE descriptions, one for each café listed
 2. Each description MUST be distinctly different from the others
 3. Each description MUST start with a DIFFERENT short, punchy descriptor (3-5 words max)
-4. Vary your approach for each café - emphasize different aspects (ambiance, community, quality, location, style, etc.)
+4. Vary your approach for each café - emphasize different aspects (ambiance, community, quality, location, style, amenities, etc.)
+5. Naturally synthesize ALL the data provided - don't just list features, weave them into compelling narratives
+6. When multiple characteristics are listed, pick the most distinctive ones that set this café apart
 
 FORMAT for each description:
 - First sentence: A SHORT, punchy descriptor that captures the café's MOST DOMINANT characteristic
-- Following sentences: Explain the match using multiple data sources
+- Following sentences: Weave together the data into a natural, flowing explanation - mention the most compelling amenities, aesthetic, community reputation, or unique features
 - Total length: 2-3 sentences maximum per café
 - Be specific and avoid generic fluff
+- NEVER use labels like "Amenities:" or "Serves:" - instead naturally incorporate features into sentences
 
 VARIETY IS ESSENTIAL:
 - Use different starting phrases for each café
@@ -59,23 +62,74 @@ Return ONLY a JSON array of ${candidates.length} description strings, nothing el
 
     // Build candidate descriptions
     const candidatesText = candidates.map((candidate: any, index: number) => {
-      const redditInsights = candidate.redditData?.totalMentions > 0
-        ? `Reddit: ${candidate.redditData.totalMentions} mentions (${
-            candidate.redditData.averageScore > 10 ? 'highly praised' :
-            candidate.redditData.averageScore > 5 ? 'well-liked' : 'discussed'
-          }). `
-        : '';
+      const parts: string[] = [`CAFÉ ${index + 1}: ${candidate.name}`];
 
-      return `
-CAFÉ ${index + 1}: ${candidate.name}
-Rating: ${candidate.rating || 'N/A'}/5 (${candidate.user_ratings_total || 0} reviews)
-Price: ${candidate.price_level ? '$'.repeat(candidate.price_level) : 'N/A'}
-${candidate.editorial_summary ? `Google: ${candidate.editorial_summary}` : ''}
-${candidate.imageAnalysis ? `Visual style: ${candidate.imageAnalysis}` : ''}
-${redditInsights}
-Matched attributes: ${candidate.keywords?.join(', ') || 'Similar quality'}
-`;
-    }).join('\n---\n');
+      // Rating and reviews
+      if (candidate.rating) {
+        parts.push(`${candidate.rating}/5 stars from ${candidate.user_ratings_total || 0} reviews`);
+      }
+
+      // Price level
+      if (candidate.price_level) {
+        parts.push(`Price range: ${candidate.price_level ? '$'.repeat(candidate.price_level) : 'N/A'}`);
+      }
+
+      // Editorial summary
+      if (candidate.editorial_summary) {
+        parts.push(candidate.editorial_summary);
+      }
+
+      // Visual style
+      if (candidate.imageAnalysis) {
+        parts.push(`Aesthetic: ${candidate.imageAnalysis}`);
+      }
+
+      // Reddit community insights
+      if (candidate.redditData?.totalMentions > 0) {
+        const sentiment = candidate.redditData.averageScore > 10 ? 'highly praised' :
+                         candidate.redditData.averageScore > 5 ? 'well-liked' : 'discussed';
+        parts.push(`${candidate.redditData.totalMentions} community mentions, ${sentiment}`);
+      }
+
+      // Type overlap (naturalistically)
+      if (candidate.typeOverlapDetails) {
+        parts.push(candidate.typeOverlapDetails);
+      }
+
+      // Amenities & Atmosphere (natural list for LLM to interpret)
+      const features: string[] = [];
+
+      // Space & Setting
+      if (candidate.outdoorSeating) features.push('has outdoor seating');
+      if (candidate.goodForGroups) features.push('good for groups');
+      if (candidate.goodForChildren) features.push('family-friendly');
+      if (candidate.allowsDogs) features.push('welcomes dogs');
+      if (candidate.liveMusic) features.push('features live music');
+      if (candidate.goodForWatchingSports) features.push('great for watching sports');
+
+      // Service Options
+      if (candidate.dineIn) features.push('offers dine-in');
+      if (candidate.takeout) features.push('takeout available');
+      if (candidate.delivery) features.push('delivers');
+      if (candidate.reservable) features.push('takes reservations');
+
+      // Food & Drink Offerings
+      if (candidate.servesBreakfast) features.push('serves breakfast');
+      if (candidate.servesBrunch) features.push('serves brunch');
+      if (candidate.servesLunch) features.push('serves lunch');
+      if (candidate.servesDinner) features.push('serves dinner');
+      if (candidate.servesCoffee) features.push('specialty coffee');
+      if (candidate.servesBeer) features.push('serves beer');
+      if (candidate.servesWine) features.push('serves wine');
+      if (candidate.servesVegetarianFood) features.push('vegetarian-friendly');
+
+      // Add all features as a natural sentence fragment
+      if (features.length > 0) {
+        parts.push(features.join(', '));
+      }
+
+      return parts.join('\n');
+    }).join('\n\n---\n\n');
 
     // Build user preferences text
     const vibePreferences = vibes ? Object.entries(vibes)

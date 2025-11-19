@@ -105,12 +105,12 @@ export async function extractKeywordsFromMultipleCafes(
 ): Promise<string[]> {
   devLog.search('Multi-cafe keyword extraction', {
     cafeCount: placesInfo.length,
-    cafes: placesInfo.map(p => p.name),
+    cafes: placesInfo.map(p => p.displayName),
   });
 
   // Extract keywords from all cafes in parallel
   const keywordArrays = await Promise.all(
-    placesInfo.map(place => extractKeywordsFromReviews(place.place_id, googleMaps))
+    placesInfo.map(place => extractKeywordsFromReviews(place.id, googleMaps))
   );
 
   devLog.keywords('Per-cafe keywords', keywordArrays);

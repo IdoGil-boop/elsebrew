@@ -32,7 +32,7 @@ const toastStyles: Record<ToastType, { bg: string; border: string; icon: string 
   warning: {
     bg: 'bg-yellow-50',
     border: 'border-yellow-200',
-    icon: '⚠️',
+    icon: '😊',
   },
 };
 

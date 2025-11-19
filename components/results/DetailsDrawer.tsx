@@ -19,7 +19,7 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
     const checkSaved = async () => {
       if (result) {
         setIsChecking(true);
-        const saved = await storage.isPlaceSaved(result.place.place_id);
+        const saved = await storage.isPlaceSaved(result.place.id);
         setIsSaved(saved);
         setIsChecking(false);
       }
@@ -38,26 +38,36 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
     }
     // Otherwise use Google Maps photos
     if (place.photos && place.photos.length > 0) {
-      return place.photos[0].getUrl({ maxWidth: 800 });
+      try {
+        const photo = place.photos[0] as any;
+        // Try new API first (getURI), then fallback to legacy (getUrl)
+        if (typeof photo.getURI === 'function') {
+          return photo.getURI({ maxWidth: 800 });
+        } else if (typeof photo.getUrl === 'function') {
+          return photo.getUrl({ maxWidth: 800 });
+        }
+      } catch (error) {
+        console.warn('Error getting photo URL:', error);
+      }
     }
     return null;
   };
 
   const getMapsEmbedUrl = () => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    return `https://www.google.com/maps/embed/v1/place?key=${apiKey}&q=place_id:${place.place_id}`;
+    return `https://www.google.com/maps/embed/v1/place?key=${apiKey}&q=place_id:${place.id}`;
   };
 
   const getGoogleMapsUrl = () => {
-    return `https://www.google.com/maps/search/?api=1&query=Google&query_place_id=${place.place_id}`;
+    return `https://www.google.com/maps/search/?api=1&query=Google&query_place_id=${place.id}`;
   };
 
   const handleSave = async () => {
     if (isSaved) return; // Already saved, do nothing
-    
+
     const photoUrl = getPhotoUrl();
     const userProfile = storage.getUserProfile();
-    
+
     // Save to API if logged in
     if (userProfile?.token) {
       try {
@@ -68,22 +78,29 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
             'Authorization': `Bearer ${userProfile.token}`,
           },
           body: JSON.stringify({
-            placeId: place.place_id,
-            name: place.name,
-            address: place.formatted_address || '',
+            placeId: place.id,
+            name: place.displayName,
+            address: place.formattedAddress || '',
             rating: place.rating,
-            priceLevel: place.price_level,
+            priceLevel: place.priceLevel,
             photoUrl: photoUrl || undefined,
           }),
         });
-        
+
+        // Handle token expiration
+        if (response.status === 401) {
+          console.log('[DetailsDrawer] Token expired - logging out user');
+          storage.setUserProfile(null);
+          return;
+        }
+
         if (response.ok) {
           const data = await response.json();
           if (data.localStorage) {
             // Also save to localStorage if AWS not configured
             storage.saveCafe({
-              placeId: place.place_id,
-              name: place.name,
+              placeId: place.id,
+              name: place.displayName,
               savedAt: Date.now(),
               photoUrl: photoUrl || undefined,
               rating: place.rating,
@@ -94,8 +111,8 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
         console.error('Error saving place:', error);
         // Fallback to localStorage
         storage.saveCafe({
-          placeId: place.place_id,
-          name: place.name,
+          placeId: place.id,
+          name: place.displayName,
           savedAt: Date.now(),
           photoUrl: photoUrl || undefined,
           rating: place.rating,
@@ -104,49 +121,57 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
     } else {
       // Not logged in, save to localStorage only
       storage.saveCafe({
-        placeId: place.place_id,
-        name: place.name,
+        placeId: place.id,
+        name: place.displayName,
         savedAt: Date.now(),
         photoUrl: photoUrl || undefined,
         rating: place.rating,
       });
     }
-    
+
     setIsSaved(true);
+    analytics.resultSaveGoogle(place.id);
   };
 
   const handleUnsave = async () => {
-    storage.removeSavedCafe(place.place_id);
+    storage.removeSavedCafe(place.id);
     
     // Also remove from API if logged in
     const userProfile = storage.getUserProfile();
     if (userProfile?.token) {
       try {
-        await fetch(`/api/user/saved-places?placeId=${place.place_id}`, {
+        const response = await fetch(`/api/user/saved-places?placeId=${place.id}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${userProfile.token}`,
           },
         });
+
+        // Handle token expiration
+        if (response.status === 401) {
+          console.log('[DetailsDrawer] Token expired during unsave - logging out user');
+          storage.setUserProfile(null);
+        }
       } catch (error) {
         console.error('Error deleting from API:', error);
       }
     }
-    
+
     setIsSaved(false);
   };
 
   const handleOpenInMaps = () => {
-    analytics.resultOpenGmaps(place.place_id);
+    analytics.resultOpenGmaps(place.id);
     window.open(getGoogleMapsUrl(), '_blank');
   };
 
   const handleShare = async () => {
+    analytics.track({ name: 'result_share', params: { place_id: place.id } });
     if (navigator.share) {
       try {
         await navigator.share({
-          title: place.name,
-          text: `Check out ${place.name} on Elsebrew`,
+          title: place.displayName,
+          text: `Check out ${place.displayName} on Elsebrew`,
           url: window.location.href,
         });
       } catch (err) {
@@ -185,7 +210,7 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
           {/* Header with photo */}
           {photoUrl && (
             <div className="w-full h-64 relative">
-              <img src={photoUrl} alt={place.name} className="w-full h-full object-cover" />
+              <img src={photoUrl} alt={place.displayName} className="w-full h-full object-cover" />
               <button
                 onClick={onClose}
                 className="absolute top-4 right-4 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-100 transition-colors"
@@ -208,39 +233,39 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
 
             {/* Title and rating */}
             <div className="mb-4">
-              <h2 className="text-2xl font-serif font-bold mb-2">{place.name}</h2>
+              <h2 className="text-2xl font-serif font-bold mb-2">{place.displayName}</h2>
               <div className="flex items-center gap-3 text-sm text-gray-600">
                 {place.rating && (
                   <div className="flex items-center space-x-1">
                     <span className="text-yellow-500">★</span>
                     <span className="font-medium">{place.rating.toFixed(1)}</span>
-                    {place.user_ratings_total && (
-                      <span>({place.user_ratings_total} reviews)</span>
+                    {place.userRatingCount && (
+                      <span>({place.userRatingCount} reviews)</span>
                     )}
                   </div>
                 )}
-                {place.price_level && (
-                  <span className="font-medium">{getPriceLevel(place.price_level)}</span>
+                {place.priceLevel && (
+                  <span className="font-medium">{getPriceLevel(place.priceLevel)}</span>
                 )}
               </div>
             </div>
 
             {/* Address */}
-            {place.formatted_address && (
-              <p className="text-sm text-gray-600 mb-4">{place.formatted_address}</p>
+            {place.formattedAddress && (
+              <p className="text-sm text-gray-600 mb-4">{place.formattedAddress}</p>
             )}
 
             {/* Opening hours */}
-            {place.opening_hours?.isOpen?.() !== undefined && (
+            {place.regularOpeningHours?.isOpen?.() !== undefined && (
               <div className="mb-4">
                 <span
                   className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                    place.opening_hours.isOpen()
+                    place.regularOpeningHours.isOpen()
                       ? 'bg-green-100 text-green-700'
                       : 'bg-red-100 text-red-700'
                   }`}
                 >
-                  {place.opening_hours.isOpen() ? 'Open now' : 'Closed'}
+                  {place.regularOpeningHours.isOpen() ? 'Open now' : 'Closed'}
                 </span>
               </div>
             )}

@@ -7,6 +7,10 @@ Elsebrew is a fake-door MVP that helps coffee lovers discover cafés in new citi
 > 📁 **New here?** See [FILE_TREE.txt](./FILE_TREE.txt) for a visual overview of the project structure.
 >
 > 📚 **Looking for specific docs?** See [DOCS_INDEX.md](./DOCS_INDEX.md) for documentation navigation.
+>
+> 🆕 **Latest Features:**
+> - ✅ Place interaction tracking for all users (anonymous + logged-in) - see [PLACE_TRACKING_FEATURE.md](PLACE_TRACKING_FEATURE.md)
+> - ✅ Atmosphere & amenity fields (outdoor seating, takeout, etc.) - see [ATMOSPHERE_FIELDS_IMPLEMENTATION.md](ATMOSPHERE_FIELDS_IMPLEMENTATION.md)
 
 ---
 
@@ -71,7 +75,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 6. Add to `.env.local`:
 
 ```
-NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=AIzaSy...
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
 ```
 
 #### Google OAuth Client ID (for Sign In with Google)
@@ -395,30 +399,57 @@ This is a **validation project**. The core functionality is real (live Google Ma
 
 ## 🐛 Troubleshooting
 
-### Maps not loading
+### Production Deployment Issues (AWS Amplify)
+
+**"Something went wrong - Failed to get source place details"**
+
+This is a common issue when deploying to AWS Amplify. See the comprehensive guide:
+
+📖 **[DEPLOYMENT_TROUBLESHOOTING.md](DEPLOYMENT_TROUBLESHOOTING.md)**
+
+Quick fixes:
+1. Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` in AWS Amplify environment variables
+2. Add your Amplify domain to Google Maps API key restrictions:
+   - Use `https://*.YOUR_APP_ID.amplifyapp.com/*` (e.g., `https://*.d1a2b3c4d5e6.amplifyapp.com/*`)
+   - ⚠️ Don't use `https://*.amplifyapp.com/*` - that's too permissive!
+3. Redeploy after changing environment variables
+
+### Local Development Issues
+
+#### Maps not loading
 
 - Check `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` in `.env.local`
 - Verify APIs are enabled in Google Cloud Console
 - Check browser console for errors
-- Ensure API key restrictions include your domain/localhost
+- Ensure API key restrictions include `http://localhost:3000/*`
 
-### Autocomplete not working
+#### 401 Unauthorized errors
+
+- **Fixed:** Token expiration handling updated to allow 24-hour grace period
+- If you still see 401 errors, try signing out and signing in again
+- Check browser console for `[Auth]` log messages
+
+#### Autocomplete not working
 
 - Verify Places API is enabled
 - Check API key restrictions
 - Open browser console and look for 403/API key errors
 
-### LLM reasoning not appearing
+#### LLM reasoning not appearing
 
 - Check `OPENAI_API_KEY` in `.env.local`
 - Verify you have credits in your OpenAI account
 - Check `/api/reason` route logs in terminal
 
-### Sign-in button not showing
+#### Sign-in button not showing
 
 - Check `NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID` in `.env.local`
 - Verify authorized origins in OAuth consent screen
 - Check browser console for errors
+
+### Need More Help?
+
+See [DEPLOYMENT_TROUBLESHOOTING.md](DEPLOYMENT_TROUBLESHOOTING.md) for detailed debugging steps, error message reference, and AWS-specific solutions.
 
 ---
 

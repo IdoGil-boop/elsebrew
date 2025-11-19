@@ -1,38 +1,97 @@
 import { PlaceBasicInfo, VibeToggles } from '@/types';
 
+/**
+ * Calculate type overlap score between a candidate place and multiple origin places.
+ * Prioritizes candidates that share types (especially primaryType) with ALL origin places.
+ *
+ * Based on Google Places API documentation:
+ * - primaryType: The single most significant classification for a place
+ * - types: Array of all applicable type classifications
+ *
+ * @param candidate - The place being scored
+ * @param origins - Array of origin places (e.g., coffee shops the user loves)
+ * @returns Score based on type overlap (0-10 scale)
+ */
+export const calculateTypeOverlapScore = (
+  candidate: PlaceBasicInfo,
+  origins: PlaceBasicInfo[]
+): { score: number; matchedOrigins: string[] } => {
+  if (!candidate.types || candidate.types.length === 0 || origins.length === 0) {
+    return { score: 0, matchedOrigins: [] };
+  }
+
+  let totalScore = 0;
+  const matchedOrigins: string[] = [];
+  const candidateTypes = new Set(candidate.types);
+  const candidatePrimaryType = candidate.primaryType;
+
+  // For each origin, calculate overlap
+  origins.forEach((origin) => {
+    if (!origin.types || origin.types.length === 0) {
+      return;
+    }
+
+    let originScore = 0;
+    const originTypes = new Set(origin.types);
+    const originPrimaryType = origin.primaryType;
+
+    // 1. Primary type match (highest weight) - +4 points
+    // If candidate's primary type matches origin's primary type exactly
+    if (candidatePrimaryType && originPrimaryType && candidatePrimaryType === originPrimaryType) {
+      originScore += 6;
+    }
+    // 2. Primary type in types array - +3 points
+    // If origin's primary type appears anywhere in candidate's types
+    else if (originPrimaryType && candidateTypes.has(originPrimaryType)) {
+      originScore += 5;
+    }
+    // 3. Candidate's primary type matches any origin type - +2 points
+    else if (candidatePrimaryType && originTypes.has(candidatePrimaryType)) {
+      originScore += 4;
+    }
+
+    // 4. Count general type overlaps (excluding common generic types) - +0.5 per match, max +2
+    const GENERIC_TYPES = new Set([
+      'point_of_interest',
+      'establishment',
+      'food',
+      'store',
+      'place_of_worship', // unlikely but just in case
+    ]);
+
+    let typeOverlapCount = 0;
+    for (const type of candidateTypes) {
+      if (originTypes.has(type) && !GENERIC_TYPES.has(type)) {
+        typeOverlapCount++;
+      }
+    }
+
+    // Cap the overlap bonus at 3 points (4 overlapping types max)
+    const overlapBonus = Math.min(typeOverlapCount * 0.5, 3);
+    originScore += overlapBonus;
+
+    // Track if this origin had meaningful overlap
+    if (originScore > 0) {
+      matchedOrigins.push(origin.displayName);
+      totalScore += originScore;
+    }
+  });
+
+  // Normalize score to 0-10 scale
+  // If we have N origins, max possible score is roughly N * 6 (4 for primary + 2 for overlap)
+  // We'll use a more conservative cap to keep scores reasonable
+  const maxPossibleScore = origins.length * 6;
+  const normalizedScore = Math.min((totalScore / maxPossibleScore) * 10, 10);
+
+  return { score: normalizedScore, matchedOrigins };
+};
+
 export const buildSearchKeywords = (
   sourcePlaceInfo: PlaceBasicInfo,
-  vibes: VibeToggles
+  _vibes: VibeToggles
 ): string[] => {
-  const keywords: string[] = ['cafe', 'coffee'];
-
-  // Base specialty coffee keywords
-  keywords.push('specialty coffee');
-
-  // Vibe-based keywords
-  if (vibes.roastery) {
-    keywords.push('roastery', 'roaster', 'single origin');
-  }
-
-  if (vibes.lightRoast) {
-    keywords.push('light roast', 'filter coffee', 'hand drip', 'pour over', 'third wave');
-  }
-
-  if (vibes.laptopFriendly) {
-    keywords.push('co-working', 'wifi', 'workspace');
-  }
-
-  if (vibes.nightOwl) {
-    keywords.push('late night', 'open late');
-  }
-
-  if (vibes.cozy) {
-    keywords.push('cozy', 'intimate', 'warm');
-  }
-
-  if (vibes.minimalist) {
-    keywords.push('minimalist', 'modern', 'clean');
-  }
+  // Base coffee keywords - vibes are now handled by actual place data fields
+  const keywords: string[] = ['cafe', 'coffee', 'specialty coffee'];
 
   return keywords;
 };
@@ -40,12 +99,14 @@ export const buildSearchKeywords = (
 export const scoreCafe = (
   candidate: PlaceBasicInfo,
   source: PlaceBasicInfo,
-  vibes: VibeToggles,
+  _vibes: VibeToggles,
   keywords: string[],
-  isRefinement: boolean = false
-): { score: number; matchedKeywords: string[] } => {
+  isRefinement: boolean = false,
+  originPlaces: PlaceBasicInfo[] = []
+): { score: number; matchedKeywords: string[]; typeOverlapDetails?: string } => {
   let score = 0;
   const matchedKeywords: string[] = [];
+  let typeOverlapDetails: string | undefined;
 
   // Base score from rating (0-5 range, scale to 0-10)
   if (candidate.rating) {
@@ -53,43 +114,53 @@ export const scoreCafe = (
   }
 
   // Review count boost (log scale to prevent dominance)
-  if (candidate.user_ratings_total && candidate.user_ratings_total > 0) {
-    score += Math.log10(candidate.user_ratings_total);
+  if (candidate.userRatingCount && candidate.userRatingCount > 0) {
+    score += Math.log10(candidate.userRatingCount);
+  }
+
+  // Type overlap scoring - prioritize places with similar types to origin(s)
+  // This is especially powerful when multiple origins are provided
+  if (originPlaces.length > 0) {
+    const { score: typeScore, matchedOrigins } = calculateTypeOverlapScore(candidate, originPlaces);
+    score += typeScore;
+
+    if (matchedOrigins.length > 0) {
+      // Build detailed type overlap information for LLM
+      const candidateTypesList = candidate.types?.filter(t =>
+        !['point_of_interest', 'establishment', 'food', 'store'].includes(t)
+      ).join(', ') || 'N/A';
+
+      const originTypesList = originPlaces
+        .map(origin => {
+          const significantTypes = origin.types?.filter(t =>
+            !['point_of_interest', 'establishment', 'food', 'store'].includes(t)
+          );
+          return `${origin.displayName} (${origin.primaryType || significantTypes?.[0] || 'cafe'})`;
+        })
+        .join(', ');
+
+      typeOverlapDetails = `Shares ${candidate.primaryType || 'cafe'} characteristics with ${
+        matchedOrigins.length === originPlaces.length ? 'all origins' : matchedOrigins.join(' and ')
+      }. Origin types: ${originTypesList}. Candidate types: ${candidateTypesList}`;
+
+      // If matched with multiple origins, that's a strong signal
+      if (matchedOrigins.length === originPlaces.length) {
+        matchedKeywords.push(`Type match: All ${originPlaces.length} origins`);
+      } else if (matchedOrigins.length > 1) {
+        matchedKeywords.push(`Type match: ${matchedOrigins.length} origins`);
+      } else {
+        matchedKeywords.push(`Type match: ${matchedOrigins[0]}`);
+      }
+    }
   }
 
   // Price level match (+2 if within ±1 of source)
-  if (source.price_level !== undefined && candidate.price_level !== undefined) {
-    const priceDiff = Math.abs(source.price_level - candidate.price_level);
+  if (source.priceLevel !== undefined && candidate.priceLevel !== undefined) {
+    const priceDiff = Math.abs(source.priceLevel - candidate.priceLevel);
     if (priceDiff <= 1) {
       score += 2;
       matchedKeywords.push('Similar price');
     }
-  }
-
-  // Editorial summary keyword matching
-  const editorialText = candidate.editorial_summary?.toLowerCase() || '';
-  const typesText = candidate.types?.join(' ').toLowerCase() || '';
-  const combinedText = `${editorialText} ${typesText}`;
-
-  // Check for roastery/roaster
-  if (vibes.roastery && (combinedText.includes('roast') || combinedText.includes('roaster'))) {
-    score += 2;
-    matchedKeywords.push('Roastery');
-  }
-
-  // Check for specialty coffee indicators
-  if (combinedText.includes('specialty') || combinedText.includes('third wave') ||
-      combinedText.includes('artisan') || combinedText.includes('craft')) {
-    score += 1;
-    matchedKeywords.push('Specialty coffee');
-  }
-
-  // Opening hours match
-  if (vibes.nightOwl && candidate.opening_hours) {
-    // Simple heuristic: if we have opening hours data, assume it might be open late
-    // In a real implementation, we'd check actual hours
-    score += 1;
-    matchedKeywords.push('Extended hours');
   }
 
   // Photo bonus (indicates quality listing)
@@ -97,16 +168,30 @@ export const scoreCafe = (
     score += 0.5;
   }
 
-  // Laptop-friendly heuristic (look for cafe/coffee_shop type)
-  if (vibes.laptopFriendly && candidate.types?.some(t =>
-    ['cafe', 'coffee_shop'].includes(t))) {
+  // Amenity-based scoring (actual place data instead of keywords)
+  if (candidate.outdoorSeating) {
     score += 1;
-    matchedKeywords.push('Cafe setting');
+    matchedKeywords.push('Outdoor seating');
+  }
+
+  if (candidate.liveMusic) {
+    score += 1;
+    matchedKeywords.push('Live music');
+  }
+
+  if (candidate.goodForGroups) {
+    score += 0.5;
+    matchedKeywords.push('Good for groups');
+  }
+
+  if (candidate.servesBreakfast || candidate.servesBrunch) {
+    score += 0.5;
+    matchedKeywords.push('All-day dining');
   }
 
   // If this is a refinement, prioritize keywords from free text and vibes
   if (isRefinement) {
-    const editorialText = candidate.editorial_summary?.toLowerCase() || '';
+    const editorialText = candidate.editorialSummary?.toLowerCase() || '';
     const typesText = candidate.types?.join(' ').toLowerCase() || '';
     const combinedText = `${editorialText} ${typesText}`;
     
@@ -121,7 +206,7 @@ export const scoreCafe = (
     });
   }
 
-  return { score, matchedKeywords };
+  return { score, matchedKeywords, typeOverlapDetails };
 };
 
 export const calculateDistance = (

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { CafeMatch } from '@/types';
 import { loadGoogleMaps } from '@/lib/maps-loader';
+import { analytics } from '@/lib/analytics';
 
 interface ResultsMapProps {
   results: CafeMatch[];
@@ -45,10 +46,10 @@ export default function ResultsMap({
 
       // Create markers
       results.forEach((result, index) => {
-        if (!result.place.geometry?.location) return;
+        if (!result.place.location) return;
 
         const marker = new google.maps.Marker({
-          position: result.place.geometry.location,
+          position: result.place.location,
           map,
           label: {
             text: String(index + 1),
@@ -66,6 +67,7 @@ export default function ResultsMap({
         });
 
         marker.addListener('click', () => {
+          analytics.resultClick({ rank: index + 1, place_id: results[index].place.id });
           onMarkerClick(index);
         });
 
@@ -76,8 +78,8 @@ export default function ResultsMap({
       if (results.length > 0) {
         const bounds = new google.maps.LatLngBounds();
         results.forEach(result => {
-          if (result.place.geometry?.location) {
-            bounds.extend(result.place.geometry.location);
+          if (result.place.location) {
+            bounds.extend(result.place.location);
           }
         });
         map.fitBounds(bounds);

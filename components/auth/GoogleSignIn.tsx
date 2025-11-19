@@ -93,6 +93,21 @@ export default function GoogleSignIn({ onSignIn }: GoogleSignInProps) {
       });
     }
 
+    // Migrate anonymous IP-based data to user account (async, don't wait)
+    fetch('/api/user/migrate-anonymous-data', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${response.credential}`,
+      },
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.migratedCount > 0) {
+          console.log(`[GoogleSignIn] Migrated ${data.migratedCount} anonymous interactions to user account`);
+        }
+      })
+      .catch(err => console.warn('[GoogleSignIn] Failed to migrate anonymous data:', err));
+
     onSignIn(userProfile);
 
     // Dispatch event for other components

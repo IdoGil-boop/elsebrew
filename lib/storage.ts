@@ -63,7 +63,7 @@ export const storage = {
   // Check if place is saved (from API or localStorage)
   async isPlaceSaved(placeId: string): Promise<boolean> {
     if (typeof window === 'undefined') return false;
-    
+
     // Check localStorage first (fast)
     if (storage.isCafeSaved(placeId)) {
       return true;
@@ -78,6 +78,14 @@ export const storage = {
             'Authorization': `Bearer ${userProfile.token}`,
           },
         });
+
+        // Handle token expiration
+        if (response.status === 401) {
+          console.log('[Storage] Token expired - logging out user');
+          storage.setUserProfile(null);
+          return false;
+        }
+
         if (response.ok) {
           const data = await response.json();
           if (data.places && Array.isArray(data.places)) {
@@ -102,7 +110,7 @@ export const storage = {
         console.error('Error checking saved place:', error);
       }
     }
-    
+
     return false;
   },
 
@@ -133,24 +141,44 @@ export const storage = {
     if (typeof window === 'undefined') return;
     if (searchParams && results) {
       // Store simplified results (without Google Maps objects which aren't serializable)
-      const simplifiedResults = results.map(r => ({
-        place: {
-          place_id: r.place.place_id,
-          name: r.place.name,
-          formatted_address: r.place.formatted_address,
-          rating: r.place.rating,
-          user_ratings_total: r.place.user_ratings_total,
-          price_level: r.place.price_level,
-          types: r.place.types,
-          editorial_summary: r.place.editorial_summary,
-          photoUrl: r.place.photos?.[0]?.getUrl({ maxWidth: 400 }),
-        },
-        score: r.score,
-        reasoning: r.reasoning,
-        matchedKeywords: r.matchedKeywords,
-        distanceToCenter: r.distanceToCenter,
-        imageAnalysis: r.imageAnalysis,
-      }));
+      const simplifiedResults = results.map(r => {
+        // Handle photo URL extraction from new API format
+        let photoUrl: string | undefined;
+        try {
+          if (r.place.photos?.[0]) {
+            const photo = r.place.photos[0];
+            // Check if getURI method exists (new API)
+            if (typeof photo.getURI === 'function') {
+              photoUrl = photo.getURI({ maxWidth: 400 });
+            }
+            // Fallback to getUrl if it exists (legacy API)
+            else if (typeof photo.getUrl === 'function') {
+              photoUrl = photo.getUrl({ maxWidth: 400 });
+            }
+          }
+        } catch (error) {
+          console.warn('[Storage] Error getting photo URL:', error);
+        }
+
+        return {
+          place: {
+            id: r.place.id,
+            displayName: r.place.displayName,
+            formattedAddress: r.place.formattedAddress,
+            rating: r.place.rating,
+            userRatingCount: r.place.userRatingCount,
+            priceLevel: r.place.priceLevel,
+            types: r.place.types,
+            editorialSummary: r.place.editorialSummary,
+            photoUrl,
+          },
+          score: r.score,
+          reasoning: r.reasoning,
+          matchedKeywords: r.matchedKeywords,
+          distanceToCenter: r.distanceToCenter,
+          imageAnalysis: r.imageAnalysis,
+        };
+      });
       sessionStorage.setItem(STORAGE_KEYS.RESULTS_STATE, JSON.stringify({
         searchParams,
         results: simplifiedResults,

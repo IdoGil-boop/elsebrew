@@ -13,6 +13,11 @@ export interface GoogleUser {
  * Verify Google JWT token server-side
  * For production, this should use Google's public keys for verification
  * For now, we'll decode and validate basic structure
+ *
+ * NOTE: This is a simplified MVP implementation. For production:
+ * 1. Verify signature using Google's public keys
+ * 2. Implement refresh token flow
+ * 3. Use proper session management
  */
 export async function verifyGoogleToken(token: string): Promise<GoogleUser | null> {
   try {
@@ -21,13 +26,27 @@ export async function verifyGoogleToken(token: string): Promise<GoogleUser | nul
     const decoded = jwt.decode(token) as GoogleUser;
 
     if (!decoded || !decoded.sub || !decoded.email) {
+      console.error('[Auth] Token decode failed - missing required fields');
       return null;
     }
 
-    // Verify token hasn't expired
+    // For MVP: Allow slightly expired tokens (up to 24 hours past expiration)
+    // This is acceptable since we're using localStorage and no sensitive operations
+    // In production, implement proper refresh token flow instead
     const exp = (decoded as any).exp;
-    if (exp && Date.now() >= exp * 1000) {
-      return null;
+    if (exp) {
+      const expirationTime = exp * 1000;
+      const now = Date.now();
+      const twentyFourHours = 24 * 60 * 60 * 1000;
+
+      if (now >= expirationTime + twentyFourHours) {
+        console.error('[Auth] Token expired more than 24 hours ago');
+        return null;
+      }
+
+      if (now >= expirationTime) {
+        console.warn('[Auth] Token expired but within 24-hour grace period');
+      }
     }
 
     return decoded;

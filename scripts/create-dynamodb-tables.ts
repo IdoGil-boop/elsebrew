@@ -18,6 +18,7 @@ const TABLES = {
   USERS: process.env.DYNAMODB_USERS_TABLE || 'elsebrew-users',
   SAVED_PLACES: process.env.DYNAMODB_SAVED_PLACES_TABLE || 'elsebrew-saved-places',
   SEARCH_HISTORY: process.env.DYNAMODB_SEARCH_HISTORY_TABLE || 'elsebrew-search-history',
+  PLACE_INTERACTIONS: process.env.DYNAMODB_PLACE_INTERACTIONS_TABLE || 'elsebrew-place-interactions',
 };
 
 async function tableExists(tableName: string): Promise<boolean> {
@@ -98,6 +99,31 @@ async function createSearchHistoryTable() {
   console.log(`✓ Created table ${tableName}`);
 }
 
+async function createPlaceInteractionsTable() {
+  const tableName = TABLES.PLACE_INTERACTIONS;
+
+  if (await tableExists(tableName)) {
+    console.log(`✓ Table ${tableName} already exists`);
+    return;
+  }
+
+  await client.send(
+    new CreateTableCommand({
+      TableName: tableName,
+      KeySchema: [
+        { AttributeName: 'userId', KeyType: 'HASH' },
+        { AttributeName: 'placeId', KeyType: 'RANGE' },
+      ],
+      AttributeDefinitions: [
+        { AttributeName: 'userId', AttributeType: 'S' },
+        { AttributeName: 'placeId', AttributeType: 'S' },
+      ],
+      BillingMode: 'PAY_PER_REQUEST',
+    })
+  );
+  console.log(`✓ Created table ${tableName}`);
+}
+
 async function main() {
   console.log('Creating DynamoDB tables...\n');
 
@@ -105,6 +131,7 @@ async function main() {
     await createUsersTable();
     await createSavedPlacesTable();
     await createSearchHistoryTable();
+    await createPlaceInteractionsTable();
 
     console.log('\n✓ All tables created successfully!');
     console.log('\nNote: Tables may take a few seconds to become active.');

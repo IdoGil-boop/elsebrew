@@ -16,6 +16,10 @@ export default function SavedPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    analytics.track({ name: 'view_saved', params: {} });
+  }, []);
+
+  useEffect(() => {
     const loadSavedCafes = async () => {
       setIsLoading(true);
       const userProfile = storage.getUserProfile();
@@ -35,6 +39,16 @@ export default function SavedPage() {
             'Authorization': `Bearer ${userProfile.token}`,
           },
         });
+
+        // Handle token expiration
+        if (response.status === 401) {
+          console.log('[Saved Page] Token expired - logging out user');
+          storage.setUserProfile(null);
+          setUser(null);
+          setSavedCafes(storage.getSavedCafes());
+          setIsLoading(false);
+          return;
+        }
 
         if (response.ok) {
           const data = await response.json();
@@ -88,6 +102,7 @@ export default function SavedPage() {
   }, []);
 
   const handleRemove = async (placeId: string) => {
+    analytics.track({ name: 'saved_cafe_remove', params: { place_id: placeId } });
     const userProfile = storage.getUserProfile();
     
     // Remove from localStorage
@@ -96,12 +111,19 @@ export default function SavedPage() {
     // Also remove from API if logged in
     if (userProfile?.token) {
       try {
-        await fetch(`/api/user/saved-places?placeId=${placeId}`, {
+        const response = await fetch(`/api/user/saved-places?placeId=${placeId}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${userProfile.token}`,
           },
         });
+
+        // Handle token expiration
+        if (response.status === 401) {
+          console.log('[Saved Page] Token expired during delete - logging out user');
+          storage.setUserProfile(null);
+          setUser(null);
+        }
       } catch (error) {
         console.error('Error deleting from API:', error);
       }

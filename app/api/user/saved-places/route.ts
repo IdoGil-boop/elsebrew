@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { getSavedPlaces, savePlace, deleteSavedPlace, SavedPlace } from '@/lib/dynamodb';
+import { getSavedPlaces, savePlace, deleteSavedPlace, SavedPlace, markPlaceAsSaved, markPlaceAsUnsaved } from '@/lib/dynamodb';
 
 export const runtime = 'nodejs';
 
@@ -79,6 +79,8 @@ export async function POST(request: NextRequest) {
 
     try {
       await savePlace(place);
+      // Also update place interactions to mark as saved
+      await markPlaceAsSaved(auth.user.sub, body.placeId);
       return NextResponse.json({ success: true, place });
     } catch (dbError: any) {
       // If DynamoDB fails (invalid credentials, table doesn't exist, etc.)
@@ -112,6 +114,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     await deleteSavedPlace(auth.user.sub, placeId);
+    // Also update place interactions to mark as unsaved
+    await markPlaceAsUnsaved(auth.user.sub, placeId);
 
     return NextResponse.json({ success: true });
   } catch (error) {

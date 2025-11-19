@@ -11,8 +11,12 @@ export const loadGoogleMaps = (): Promise<typeof google> => {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   if (!apiKey) {
-    throw new Error('Google Maps API key is not configured');
+    const error = new Error('Google Maps API key is not configured. Please set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in your environment variables.');
+    console.error('[Maps Loader] Configuration error:', error.message);
+    throw error;
   }
+
+  console.log('[Maps Loader] Initializing with API key:', apiKey.substring(0, 10) + '...');
 
   loaderInstance = new Loader({
     apiKey,
@@ -20,7 +24,16 @@ export const loadGoogleMaps = (): Promise<typeof google> => {
     libraries: ['places'],
   });
 
-  mapsPromise = loaderInstance.load();
+  mapsPromise = loaderInstance.load().catch((error) => {
+    console.error('[Maps Loader] Failed to load Google Maps:', {
+      error: error.message,
+      stack: error.stack,
+    });
+    // Reset promise so it can be retried
+    mapsPromise = null;
+    throw new Error(`Google Maps API failed to load: ${error.message}. This might be due to API key restrictions or quota limits.`);
+  });
+
   return mapsPromise;
 };
 

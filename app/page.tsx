@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import SearchPanel from '@/components/home/SearchPanel';
 import EmailSignup from '@/components/home/EmailSignup';
-import PricingStrip from '@/components/home/PricingStrip';
+// import PricingStrip from '@/components/home/PricingStrip';
 import TypingTitle from '@/components/home/TypingTitle';
 import { analytics } from '@/lib/analytics';
 
@@ -31,9 +31,9 @@ export default function Home() {
       </div>
 
       {/* Pricing Strip */}
-      <div className="mb-8">
+      {/* <div className="mb-8">
         <PricingStrip />
-      </div>
+      </div> */}
 
       {/* Email Signup */}
       <div className="mb-12">

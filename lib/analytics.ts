@@ -86,4 +86,7 @@ export const analytics = {
 
   freeTextSearch: (params: { has_text: boolean }) =>
     track({ name: 'free_text_search', params }),
+
+  // Export track for custom events
+  track,
 };
