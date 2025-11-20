@@ -6,24 +6,57 @@ import { analytics } from '@/lib/analytics';
 
 export default function EmailSignup() {
   const [email, setEmail] = useState('');
-  const [status, setStatus] = useState<'idle' | 'success'>('idle');
+  const [status, setStatus] = useState<'idle' | 'success' | 'error' | 'loading'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!email) return;
 
-    // Track submission
-    analytics.emailSubscribeSubmit();
+    setStatus('loading');
+    setErrorMessage('');
 
-    // In a real app, this would POST to the Mailchimp form action
-    // For now, just show success
-    setStatus('success');
-    setEmail('');
+    try {
+      // Track submission
+      analytics.emailSubscribeSubmit();
 
-    setTimeout(() => {
-      setStatus('idle');
-    }, 3000);
+      const response = await fetch('/api/email/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error(`Server returned ${response.status}: ${text.substring(0, 100)}`);
+      }
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to subscribe');
+      }
+
+      setStatus('success');
+      setEmail('');
+
+      setTimeout(() => {
+        setStatus('idle');
+      }, 3000);
+    } catch (error: any) {
+      setStatus('error');
+      setErrorMessage(error.message || 'Something went wrong. Please try again.');
+      
+      setTimeout(() => {
+        setStatus('idle');
+        setErrorMessage('');
+      }, 5000);
+    }
   };
 
   return (
@@ -40,6 +73,8 @@ export default function EmailSignup() {
 
       {status === 'success' ? (
         <div className="text-green-600 font-medium">✓ Thanks for subscribing!</div>
+      ) : status === 'error' ? (
+        <div className="text-red-600 font-medium">{errorMessage}</div>
       ) : (
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
@@ -49,9 +84,14 @@ export default function EmailSignup() {
             placeholder="your@email.com"
             className="input-field flex-1"
             required
+            disabled={status === 'loading'}
           />
-          <button type="submit" className="btn-primary">
-            Subscribe
+          <button 
+            type="submit" 
+            className="btn-primary"
+            disabled={status === 'loading'}
+          >
+            {status === 'loading' ? 'Subscribing...' : 'Subscribe'}
           </button>
         </form>
       )}

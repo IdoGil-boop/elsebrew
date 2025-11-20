@@ -2,18 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { SavedCafe, UserProfile } from '@/types';
+import { SavedCafe, UserProfile, CafeMatch, PlaceBasicInfo } from '@/types';
 import { storage } from '@/lib/storage';
 import { analytics } from '@/lib/analytics';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import GoogleSignIn from '@/components/auth/GoogleSignIn';
+import DetailsDrawer from '@/components/results/DetailsDrawer';
+import { loadGoogleMaps } from '@/lib/maps-loader';
 
 export default function SavedPage() {
   const router = useRouter();
   const [savedCafes, setSavedCafes] = useState<SavedCafe[]>([]);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedResult, setSelectedResult] = useState<CafeMatch | null>(null);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
   useEffect(() => {
     try {
@@ -164,6 +168,99 @@ export default function SavedPage() {
     window.open(url, '_blank');
   };
 
+  const handleCafeClick = async (cafe: SavedCafe) => {
+    try {
+      setIsLoadingDetails(true);
+      
+      // Load Google Maps if not already loaded
+      await loadGoogleMaps();
+      
+      // Create a map instance (required for PlacesService)
+      const map = new google.maps.Map(document.createElement('div'));
+      const service = new google.maps.places.PlacesService(map);
+      
+      // Fetch place details
+      const placeDetails = await new Promise<PlaceBasicInfo>((resolve, reject) => {
+        service.getDetails(
+          {
+            placeId: cafe.placeId,
+            fields: [
+              'place_id',
+              'name',
+              'formatted_address',
+              'types',
+              'rating',
+              'user_ratings_total',
+              'price_level',
+              'opening_hours',
+              'photos',
+              'editorial_summary',
+              'geometry',
+            ],
+          },
+          (place, status) => {
+            if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+              const primaryType = place.types && place.types.length > 0 ? place.types[0] : undefined;
+              
+              resolve({
+                id: place.place_id!,
+                displayName: place.name!,
+                formattedAddress: place.formatted_address,
+                types: place.types,
+                primaryType: primaryType,
+                rating: place.rating,
+                userRatingCount: place.user_ratings_total,
+                priceLevel: place.price_level,
+                regularOpeningHours: place.opening_hours,
+                photos: place.photos,
+                editorialSummary: (place as any).editorial_summary?.overview,
+                location: place.geometry?.location,
+                photoUrl: cafe.photoUrl, // Use cached photo URL
+              });
+            } else {
+              reject(new Error(`Failed to get place details: ${status}`));
+            }
+          }
+        );
+      });
+      
+      // Convert to CafeMatch format
+      const cafeMatch: CafeMatch = {
+        place: placeDetails,
+        score: 0, // Saved places don't have scores
+        reasoning: undefined,
+        matchedKeywords: [],
+      };
+      
+      setSelectedResult(cafeMatch);
+      analytics.resultClick({
+        rank: 0,
+        place_id: cafe.placeId,
+      });
+    } catch (error) {
+      console.error('Error loading place details:', error);
+      // Fallback: still open the drawer with minimal info
+      const cafeMatch: CafeMatch = {
+        place: {
+          id: cafe.placeId,
+          displayName: cafe.name,
+          photoUrl: cafe.photoUrl,
+          rating: cafe.rating,
+        },
+        score: 0,
+        reasoning: undefined,
+        matchedKeywords: [],
+      };
+      setSelectedResult(cafeMatch);
+    } finally {
+      setIsLoadingDetails(false);
+    }
+  };
+
+  const handleCloseDrawer = () => {
+    setSelectedResult(null);
+  };
+
   // Show loading state
   if (isLoading) {
     return (
@@ -265,7 +362,8 @@ export default function SavedPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: index * 0.05 }}
-                className="card p-4 sm:p-6"
+                className="card p-4 sm:p-6 cursor-pointer hover:shadow-lg transition-shadow"
+                onClick={() => handleCafeClick(cafe)}
               >
                 <div className="flex gap-4 sm:gap-6">
                   {/* Photo */}
@@ -298,7 +396,7 @@ export default function SavedPage() {
                     </p>
 
                     {/* Actions */}
-                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => handleOpenInMaps(cafe.placeId)}
                         className="btn-primary text-sm py-2 sm:py-3"
@@ -319,6 +417,19 @@ export default function SavedPage() {
           </div>
         </div>
       </div>
+      
+      {/* Details Drawer */}
+      {isLoadingDetails && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6">
+            <div className="text-center">
+              <div className="text-4xl mb-4 animate-bounce">☕</div>
+              <div className="text-lg text-gray-600">Loading place details...</div>
+            </div>
+          </div>
+        </div>
+      )}
+      <DetailsDrawer result={selectedResult} onClose={handleCloseDrawer} />
     </div>
   );
 }

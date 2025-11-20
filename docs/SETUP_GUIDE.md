@@ -24,8 +24,8 @@ npm install
 ## Step 2: Google Maps API Setup
 
 Elsebrew requires **two API keys** for security best practices:
-- **Client-side key** for Maps JavaScript API (displayed in browser)
-- **Server-side key** for Places API calls (server-side only)
+- **Client-side key** for Maps JavaScript API, Places, Geocoding, and Maps Embed (displayed in browser)
+- **Server-side key** for Places API (New) calls (server-side only)
 
 **📘 Full Guide:** See [GOOGLE_API_KEYS_SETUP.md](./GOOGLE_API_KEYS_SETUP.md) for detailed step-by-step instructions.
 
@@ -34,14 +34,17 @@ Elsebrew requires **two API keys** for security best practices:
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project (or select existing)
 3. Navigate to "APIs & Services" → "Library"
-4. Enable these APIs:
+4. Enable **ALL 5** of these APIs:
    - **Maps JavaScript API**
+   - **Places API**
+   - **Geocoding API**
+   - **Maps Embed API**
    - **Places API (New)**
 
 5. Create **two API keys**:
 
    **Client-Side Key:**
-   - API restrictions: Maps JavaScript API only
+   - API restrictions: Maps JavaScript API + Places API + Geocoding API + Maps Embed API + Places API (New)
    - Application restrictions: HTTP referrers
      - `http://localhost:3000/*`
      - `https://yourdomain.com/*` (add later)

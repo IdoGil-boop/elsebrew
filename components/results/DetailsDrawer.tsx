@@ -48,6 +48,13 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
     };
   }, [result, onClose]);
 
+  // Reset photo index when result changes
+  useEffect(() => {
+    if (result) {
+      setCurrentPhotoIndex(0);
+    }
+  }, [result]);
+
   if (!result) return null;
 
   const { place, matchedKeywords, reasoning } = result;
@@ -88,11 +95,6 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
   };
 
   const photoUrls = getPhotoUrls();
-  
-  // Reset photo index when result changes
-  useEffect(() => {
-    setCurrentPhotoIndex(0);
-  }, [result]);
 
   const scrollToPhoto = (index: number) => {
     if (!carouselRef.current) return;

@@ -4,10 +4,17 @@ This guide walks you through creating and configuring Google API keys for Elsebr
 
 ## Overview
 
-Elsebrew uses Google Cloud services in two ways:
+Elsebrew uses Google Cloud services in multiple ways:
 
-1. **Client-side**: Maps JavaScript API (displays maps in the browser)
-2. **Server-side**: Places API (fetches place details from Next.js API routes)
+**Client-side (browser):**
+1. Maps JavaScript API - displays interactive maps
+2. Places API - autocomplete in search fields, place details via PlacesService
+3. Geocoding API - converts addresses to coordinates
+4. Maps Embed API - embedded map in details drawer
+5. Places API (New) - searchByText for finding cafes (⚠️ currently called from browser, should be moved to server)
+
+**Server-side (Next.js API routes):**
+6. Places API (New) - fetches detailed place info via REST API
 
 For security best practices, we recommend using **separate API keys** with different restrictions.
 
@@ -23,12 +30,17 @@ For security best practices, we recommend using **separate API keys** with diffe
 
 ## Step 2: Enable Required APIs
 
-Before creating keys, enable these APIs:
+Before creating keys, enable this API:
 
 1. Go to **APIs & Services** → **Library**
 2. Search and enable:
-   - **Maps JavaScript API** (for client-side map display)
-   - **Places API (New)** (for server-side place details)
+   - **Maps JavaScript API** (for interactive maps in browser)
+   - **Places API** (for autocomplete & PlacesService in browser)
+   - **Geocoding API** (for address-to-coordinates conversion)
+   - **Maps Embed API** (for embedded maps in details drawer)
+   - **Places API (New)** (for searchByText in browser AND server-side place details)
+
+**Note:** "Places API (New)" must be enabled on BOTH the client and server keys because searchByText is currently called from the browser.
 
 ---
 
@@ -45,9 +57,15 @@ This key will be exposed in your frontend code and restricted by HTTP referrers.
 ### Configure API Restrictions
 
 1. Under **API restrictions**, select **Restrict key**
-2. Choose **only** these APIs:
+2. Choose **ALL** of these APIs for the client key:
    - ✅ Maps JavaScript API
+   - ✅ Places API
+   - ✅ Geocoding API
+   - ✅ Maps Embed API
+   - ✅ Places API (New) (required for searchByText in browser)
 3. Click **Save**
+
+**Note:** The Places API (New) is needed for the `searchByText` method which is currently called from client-side code. For better security, this should be moved to server-side in the future.
 
 ### Configure Application Restrictions
 
@@ -136,8 +154,11 @@ You should see:
 If you prefer to use one key for both purposes:
 
 1. Create one API key
-2. Enable **both** APIs:
+2. Enable **ALL FIVE** APIs:
    - Maps JavaScript API
+   - Places API
+   - Geocoding API
+   - Maps Embed API
    - Places API (New)
 3. Use **HTTP referrers** restriction (less secure for server-side)
 4. Use the same key for both environment variables:

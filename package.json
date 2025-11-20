@@ -9,6 +9,7 @@
     "lint": "next lint",
     "check-env": "node check-env.js",
     "setup-db": "tsx scripts/create-dynamodb-tables.ts",
+    "create-tables": "tsx scripts/create-dynamodb-tables.ts",
     "test-aws": "tsx scripts/test-aws-credentials.ts"
   },
   "dependencies": {

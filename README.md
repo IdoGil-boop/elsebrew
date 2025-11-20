@@ -61,8 +61,8 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 Elsebrew requires **two API keys** for security best practices:
 
-1. **Client-side key** (`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`) - for Maps JavaScript API in the browser
-2. **Server-side key** (`GOOGLE_MAPS_API_KEY`) - for Places API calls from Next.js API routes
+1. **Client-side key** (`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`) - for Maps JavaScript API and Places autocomplete in the browser
+2. **Server-side key** (`GOOGLE_MAPS_API_KEY`) - for Places API (New) calls from Next.js API routes
 
 **Quick Setup:**
 
@@ -70,9 +70,9 @@ See [docs/GOOGLE_API_KEYS_SETUP.md](./docs/GOOGLE_API_KEYS_SETUP.md) for detaile
 
 **TL;DR:**
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Enable: **Maps JavaScript API** and **Places API (New)**
+2. Enable these 5 APIs: **Maps JavaScript API**, **Places API**, **Geocoding API**, **Maps Embed API**, and **Places API (New)**
 3. Create two API keys with different restrictions:
-   - Client key: HTTP referrers + Maps JavaScript API only
+   - Client key: HTTP referrers + ALL 5 APIs (including Places API New for searchByText)
    - Server key: IP addresses (or None) + Places API (New) only
 4. Add to `.env.local`:
 

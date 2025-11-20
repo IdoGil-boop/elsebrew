@@ -15,13 +15,16 @@ Use this checklist to get Elsebrew from code to production.
 **See [GOOGLE_API_KEYS_SETUP.md](./GOOGLE_API_KEYS_SETUP.md) for detailed instructions**
 
 - [ ] Created Google Cloud project
-- [ ] Enabled Maps JavaScript API
-- [ ] Enabled Places API (New)
-- [ ] Created client-side API key (for Maps JS API in browser)
-- [ ] Restricted client key: HTTP referrers + Maps JavaScript API only
+- [ ] Enabled **Maps JavaScript API**
+- [ ] Enabled **Places API**
+- [ ] Enabled **Geocoding API**
+- [ ] Enabled **Maps Embed API**
+- [ ] Enabled **Places API (New)**
+- [ ] Created client-side API key (for browser)
+- [ ] Restricted client key: HTTP referrers + Maps JavaScript API + Places API + Geocoding API + Maps Embed API
 - [ ] Added `http://localhost:3000/*` to allowed referrers
 - [ ] Copied client key to `.env.local` → `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
-- [ ] Created server-side API key (for Places API from Next.js)
+- [ ] Created server-side API key (for Next.js API routes)
 - [ ] Restricted server key: IP addresses (or None) + Places API (New) only
 - [ ] Copied server key to `.env.local` → `GOOGLE_MAPS_API_KEY`
 

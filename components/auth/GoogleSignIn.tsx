@@ -143,7 +143,7 @@ export default function GoogleSignIn({ onSignIn }: GoogleSignInProps) {
         size: 'medium',
         text: 'signin',
         shape: 'rectangular',
-        width: window.innerWidth < 640 ? 180 : 240,
+        width: window.innerWidth < 640 ? 90 : 240,
       });
 
       console.log('[GoogleSignIn] Button rendered successfully');

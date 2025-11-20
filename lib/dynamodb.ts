@@ -27,7 +27,7 @@ function getCredentials(): { accessKeyId: string; secretAccessKey: string; regio
     const availableVars = Object.keys(process.env).filter(k => k.startsWith('DYNAMODB_'));
     const error = new Error(
       'AWS credentials not configured. Set DYNAMODB_ACCESS_KEY_ID and DYNAMODB_SECRET_ACCESS_KEY environment variables. ' +
-      'In AWS Amplify: Go to Environment Variables → Add as Secrets → Redeploy. ' +
+      'In AWS Amplify: Go to Environment Variables -> Add as Secrets -> Redeploy. ' +
       `Found ${availableVars.length} DYNAMODB_* vars: ${availableVars.join(', ') || 'none'}`
     );
     logger.error('[DynamoDB] Credentials check failed', {
@@ -139,6 +139,8 @@ export const TABLES = {
   SAVED_PLACES: process.env.DYNAMODB_SAVED_PLACES_TABLE || 'elsebrew-saved-places',
   SEARCH_HISTORY: process.env.DYNAMODB_SEARCH_HISTORY_TABLE || 'elsebrew-search-history',
   PLACE_INTERACTIONS: process.env.DYNAMODB_PLACE_INTERACTIONS_TABLE || 'elsebrew-place-interactions',
+  RATE_LIMITS: process.env.DYNAMODB_RATE_LIMITS_TABLE || 'elsebrew-rate-limits',
+  EMAIL_SUBSCRIPTIONS: process.env.DYNAMODB_EMAIL_SUBSCRIPTIONS_TABLE || 'elsebrew-email-subscriptions',
 };
 
 // Types
@@ -565,6 +567,410 @@ export async function migrateAnonymousDataToUser(
     logger.error('[Migration] Failed to migrate anonymous data:', error);
     return { migratedCount: 0, errors: 1 };
   }
+}
+
+// Rate limiting operations
+export interface RateLimitInfo {
+  userId: string;
+  searchCount: number;
+  windowStart: string; // ISO timestamp
+  resetAt: string; // ISO timestamp when limit resets
+}
+
+export interface EmailSubscription {
+  email: string;
+  subscribedAt: string;
+  source?: string; // e.g., 'homepage', 'footer'
+}
+
+const RATE_LIMIT_WINDOW_HOURS = 12;
+const RATE_LIMIT_MAX_SEARCHES = 1;
+
+/**
+ * Get current rate limit info for a single identifier (without incrementing)
+ * Internal helper function
+ */
+async function getRateLimitForId(userId: string): Promise<{
+  currentCount: number;
+  resetAt: string;
+  windowStart: Date;
+}> {
+  const db = await getDynamoDB();
+  const now = new Date();
+  const windowMs = RATE_LIMIT_WINDOW_HOURS * 60 * 60 * 1000;
+
+  const existing = await db.send(
+    new GetCommand({
+      TableName: TABLES.RATE_LIMITS,
+      Key: { userId },
+    })
+  );
+
+  if (!existing.Item) {
+    return {
+      currentCount: 0,
+      resetAt: new Date(now.getTime() + windowMs).toISOString(),
+      windowStart: now,
+    };
+  }
+
+  const item = existing.Item as RateLimitInfo;
+  const windowStartTime = new Date(item.windowStart);
+  const elapsed = now.getTime() - windowStartTime.getTime();
+
+  if (elapsed >= windowMs) {
+    // Window expired
+    return {
+      currentCount: 0,
+      resetAt: new Date(now.getTime() + windowMs).toISOString(),
+      windowStart: now,
+    };
+  }
+
+  return {
+    currentCount: item.searchCount || 0,
+    resetAt: new Date(windowStartTime.getTime() + windowMs).toISOString(),
+    windowStart: windowStartTime,
+  };
+}
+
+/**
+ * Increment rate limit for a single identifier
+ * Internal helper function
+ */
+async function incrementRateLimitForId(userId: string, windowStart: Date): Promise<void> {
+  const db = await getDynamoDB();
+  const now = new Date();
+  const windowMs = RATE_LIMIT_WINDOW_HOURS * 60 * 60 * 1000;
+
+  const existing = await db.send(
+    new GetCommand({
+      TableName: TABLES.RATE_LIMITS,
+      Key: { userId },
+    })
+  );
+
+  let searchCount = 1;
+  let finalWindowStart = windowStart;
+  let resetAt = new Date(windowStart.getTime() + windowMs);
+
+  if (existing.Item) {
+    const item = existing.Item as RateLimitInfo;
+    const existingWindowStart = new Date(item.windowStart);
+    const elapsed = now.getTime() - existingWindowStart.getTime();
+
+    if (elapsed < windowMs) {
+      // Still in existing window
+      searchCount = (item.searchCount || 0) + 1;
+      finalWindowStart = existingWindowStart;
+      resetAt = new Date(existingWindowStart.getTime() + windowMs);
+    } else {
+      // Existing window expired, use new window
+      searchCount = 1;
+      finalWindowStart = windowStart;
+      resetAt = new Date(windowStart.getTime() + windowMs);
+    }
+  }
+
+  const ttl = Math.floor(resetAt.getTime() / 1000) + 3600;
+
+  await db.send(
+    new PutCommand({
+      TableName: TABLES.RATE_LIMITS,
+      Item: {
+        userId,
+        searchCount,
+        windowStart: finalWindowStart.toISOString(),
+        resetAt: resetAt.toISOString(),
+        ttl,
+      },
+    })
+  );
+}
+
+/**
+ * Check and increment rate limit for a user
+ * Checks BOTH user ID and IP address - if EITHER is at limit, blocks the request
+ * Returns whether the search is allowed and current rate limit info
+ */
+export async function checkAndIncrementRateLimit(
+  userId: string,
+  ipAddress?: string
+): Promise<{
+  allowed: boolean;
+  remaining: number;
+  resetAt: string;
+  currentCount: number;
+  blockedBy: 'user' | 'ip' | null;
+}> {
+  // First, check both limits WITHOUT incrementing
+  const userLimit = await getRateLimitForId(userId);
+  
+  let ipLimit: { currentCount: number; resetAt: string; windowStart: Date } | null = null;
+  // Only check IP limit if:
+  // 1. IP address is provided
+  // 2. User is authenticated (userId doesn't start with 'ip-')
+  // 3. IP is different from the userId (to avoid double-checking)
+  if (ipAddress && !userId.startsWith('ip-') && userId !== `ip-${ipAddress}`) {
+    const ipUserId = `ip-${ipAddress}`;
+    ipLimit = await getRateLimitForId(ipUserId);
+  }
+
+  // Check if either limit would be exceeded
+  // Block if currentCount + 1 would exceed the limit (>= instead of >)
+  const userWouldExceed = (userLimit.currentCount + 1) > RATE_LIMIT_MAX_SEARCHES;
+  const ipWouldExceed = ipLimit && (ipLimit.currentCount + 1) > RATE_LIMIT_MAX_SEARCHES;
+  
+  logger.debug('[Rate Limit] Checking limits:', {
+    userId,
+    ipAddress,
+    userCurrentCount: userLimit.currentCount,
+    ipCurrentCount: ipLimit?.currentCount,
+    maxSearches: RATE_LIMIT_MAX_SEARCHES,
+    userWouldExceed,
+    ipWouldExceed,
+  });
+
+  // OR condition: if EITHER limit would be exceeded, block
+  if (userWouldExceed) {
+    return {
+      allowed: false,
+      remaining: Math.max(0, RATE_LIMIT_MAX_SEARCHES - userLimit.currentCount),
+      resetAt: userLimit.resetAt,
+      currentCount: userLimit.currentCount,
+      blockedBy: 'user',
+    };
+  }
+
+  if (ipWouldExceed) {
+    return {
+      allowed: false,
+      remaining: Math.max(0, RATE_LIMIT_MAX_SEARCHES - ipLimit!.currentCount),
+      resetAt: ipLimit!.resetAt,
+      currentCount: ipLimit!.currentCount,
+      blockedBy: 'ip',
+    };
+  }
+
+  // Both are allowed, increment both
+  await incrementRateLimitForId(userId, userLimit.windowStart);
+  if (ipLimit) {
+    await incrementRateLimitForId(`ip-${ipAddress}`, ipLimit.windowStart);
+  }
+
+  // Return the more restrictive limit (fewer remaining)
+  const userRemaining = RATE_LIMIT_MAX_SEARCHES - (userLimit.currentCount + 1);
+  const ipRemaining = ipLimit ? RATE_LIMIT_MAX_SEARCHES - (ipLimit.currentCount + 1) : Infinity;
+  
+  if (ipRemaining < userRemaining) {
+    return {
+      allowed: true,
+      remaining: ipRemaining,
+      resetAt: ipLimit!.resetAt,
+      currentCount: ipLimit!.currentCount + 1,
+      blockedBy: null,
+    };
+  }
+
+  return {
+    allowed: true,
+    remaining: userRemaining,
+    resetAt: userLimit.resetAt,
+    currentCount: userLimit.currentCount + 1,
+    blockedBy: null,
+  };
+}
+
+/**
+ * Get current rate limit info without incrementing
+ */
+export async function getRateLimitInfo(userId: string): Promise<{
+  remaining: number;
+  resetAt: string;
+  currentCount: number;
+}> {
+  const db = await getDynamoDB();
+  const now = new Date();
+  const windowMs = RATE_LIMIT_WINDOW_HOURS * 60 * 60 * 1000;
+
+  const existing = await db.send(
+    new GetCommand({
+      TableName: TABLES.RATE_LIMITS,
+      Key: { userId },
+    })
+  );
+
+  if (!existing.Item) {
+    return {
+      remaining: RATE_LIMIT_MAX_SEARCHES,
+      resetAt: new Date(now.getTime() + windowMs).toISOString(),
+      currentCount: 0,
+    };
+  }
+
+  const item = existing.Item as RateLimitInfo;
+  const windowStartTime = new Date(item.windowStart);
+  const elapsed = now.getTime() - windowStartTime.getTime();
+
+  if (elapsed >= windowMs) {
+    // Window expired
+    return {
+      remaining: RATE_LIMIT_MAX_SEARCHES,
+      resetAt: new Date(now.getTime() + windowMs).toISOString(),
+      currentCount: 0,
+    };
+  }
+
+  const currentCount = item.searchCount || 0;
+  const remaining = Math.max(0, RATE_LIMIT_MAX_SEARCHES - currentCount);
+  const resetAt = new Date(windowStartTime.getTime() + windowMs);
+
+  return {
+    remaining,
+    resetAt: resetAt.toISOString(),
+    currentCount,
+  };
+}
+
+/**
+ * Merge rate limit data from IP to user account when user signs in
+ */
+export async function mergeRateLimitData(
+  ipAddress: string,
+  userId: string
+): Promise<void> {
+  try {
+    const db = await getDynamoDB();
+    const ipUserId = `ip-${ipAddress}`;
+    const now = new Date();
+    const windowMs = RATE_LIMIT_WINDOW_HOURS * 60 * 60 * 1000;
+
+    // Get IP-based rate limit
+    const ipLimit = await db.send(
+      new GetCommand({
+        TableName: TABLES.RATE_LIMITS,
+        Key: { userId: ipUserId },
+      })
+    );
+
+    // Get user-based rate limit
+    const userLimit = await db.send(
+      new GetCommand({
+        TableName: TABLES.RATE_LIMITS,
+        Key: { userId },
+      })
+    );
+
+    // If no IP limit exists, nothing to merge
+    if (!ipLimit.Item) {
+      return;
+    }
+
+    const ipItem = ipLimit.Item as RateLimitInfo;
+    const ipWindowStart = new Date(ipItem.windowStart);
+    const ipElapsed = now.getTime() - ipWindowStart.getTime();
+
+    // If IP window expired, nothing to merge
+    if (ipElapsed >= windowMs) {
+      // Clean up expired IP record
+      await db.send(
+        new DeleteCommand({
+          TableName: TABLES.RATE_LIMITS,
+          Key: { userId: ipUserId },
+        })
+      );
+      return;
+    }
+
+    let finalSearchCount = ipItem.searchCount || 0;
+    let finalWindowStart = ipWindowStart;
+    let finalResetAt = new Date(ipWindowStart.getTime() + windowMs);
+
+    // If user limit exists, merge them (take the higher count and earlier window start)
+    if (userLimit.Item) {
+      const userItem = userLimit.Item as RateLimitInfo;
+      const userWindowStart = new Date(userItem.windowStart);
+      const userElapsed = now.getTime() - userWindowStart.getTime();
+
+      // If user window hasn't expired
+      if (userElapsed < windowMs) {
+        const userSearchCount = userItem.searchCount || 0;
+        
+        // Take the higher count
+        finalSearchCount = Math.max(finalSearchCount, userSearchCount);
+        
+        // Take the earlier window start (more restrictive)
+        if (userWindowStart < ipWindowStart) {
+          finalWindowStart = userWindowStart;
+          finalResetAt = new Date(userWindowStart.getTime() + windowMs);
+        }
+      }
+    }
+
+    // Update user limit with merged data
+    const ttl = Math.floor(finalResetAt.getTime() / 1000) + 3600;
+    await db.send(
+      new PutCommand({
+        TableName: TABLES.RATE_LIMITS,
+        Item: {
+          userId,
+          searchCount: finalSearchCount,
+          windowStart: finalWindowStart.toISOString(),
+          resetAt: finalResetAt.toISOString(),
+          ttl,
+        },
+      })
+    );
+
+    // Delete IP-based record
+    await db.send(
+      new DeleteCommand({
+        TableName: TABLES.RATE_LIMITS,
+        Key: { userId: ipUserId },
+      })
+    );
+
+    logger.debug(`[Rate Limit Merge] Merged IP ${ipAddress} rate limit to user ${userId}: ${finalSearchCount} searches`);
+  } catch (error) {
+    logger.error('[Rate Limit Merge] Error merging rate limit data:', error);
+    // Don't throw - merging is best effort
+  }
+}
+
+// Email subscription operations
+export async function subscribeEmail(email: string, source?: string): Promise<void> {
+  const db = await getDynamoDB();
+  await db.send(
+    new PutCommand({
+      TableName: TABLES.EMAIL_SUBSCRIPTIONS,
+      Item: {
+        email: email.toLowerCase().trim(),
+        subscribedAt: new Date().toISOString(),
+        source: source || 'homepage',
+      },
+    })
+  );
+}
+
+export async function getEmailSubscription(email: string): Promise<EmailSubscription | null> {
+  const db = await getDynamoDB();
+  const result = await db.send(
+    new GetCommand({
+      TableName: TABLES.EMAIL_SUBSCRIPTIONS,
+      Key: { email: email.toLowerCase().trim() },
+    })
+  );
+  return result.Item as EmailSubscription || null;
+}
+
+export async function unsubscribeEmail(email: string): Promise<void> {
+  const db = await getDynamoDB();
+  await db.send(
+    new DeleteCommand({
+      TableName: TABLES.EMAIL_SUBSCRIPTIONS,
+      Key: { email: email.toLowerCase().trim() },
+    })
+  );
 }
 
 export default getDynamoDB;

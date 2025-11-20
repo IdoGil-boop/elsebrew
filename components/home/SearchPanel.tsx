@@ -7,6 +7,7 @@ import { loadGoogleMaps } from '@/lib/maps-loader';
 import { VibeToggles } from '@/types';
 import { analytics } from '@/lib/analytics';
 import Toast from '@/components/shared/Toast';
+import { getAuthToken } from '@/lib/storage';
 
 export default function SearchPanel() {
   const router = useRouter();
@@ -126,13 +127,59 @@ export default function SearchPanel() {
     setSourcePlaces(prev => prev.filter(p => p.place_id !== placeId));
   };
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     if (sourcePlaces.length === 0 || !destPlace || !destPlace.name) {
       alert('Please select at least one source café and a destination city');
       return;
     }
 
     setIsLoading(true);
+
+    // Check rate limit before navigating
+    try {
+      const authToken = getAuthToken();
+      const rateLimitHeaders: HeadersInit = {};
+      if (authToken) {
+        rateLimitHeaders['Authorization'] = `Bearer ${authToken}`;
+      }
+
+      const rateLimitResponse = await fetch('/api/rate-limit/check', {
+        method: 'POST',
+        headers: rateLimitHeaders,
+      });
+
+      const rateLimitData = await rateLimitResponse.json();
+
+      if (!rateLimitData.allowed) {
+        // Format reset time nicely
+        const resetAt = new Date(rateLimitData.resetAt);
+        const now = new Date();
+        const hoursUntilReset = Math.ceil((resetAt.getTime() - now.getTime()) / (1000 * 60 * 60));
+        const minutesUntilReset = Math.ceil((resetAt.getTime() - now.getTime()) / (1000 * 60));
+        
+        let timeUntilReset: string;
+        if (hoursUntilReset >= 1) {
+          timeUntilReset = hoursUntilReset === 1 ? '1 hour' : `${hoursUntilReset} hours`;
+        } else {
+          timeUntilReset = minutesUntilReset === 1 ? '1 minute' : `${minutesUntilReset} minutes`;
+        }
+
+        const resetTime = resetAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        
+        // Build message - only suggest sign-in if not already authenticated
+        const isAuthenticated = rateLimitData.isAuthenticated !== false;
+        let message = `You've reached your search limit of ${rateLimitData.limit} searches per 12 hours. Your limit will refresh in ${timeUntilReset} (at ${resetTime}).`;
+
+        
+        setToastMessage(message);
+        setShowToast(true);
+        setIsLoading(false);
+        return; // Don't navigate
+      }
+    } catch (error) {
+      console.error('[SearchPanel] Rate limit check failed:', error);
+      // On error, allow the search (fail open for better UX)
+    }
 
     // Track search
     analytics.searchSubmit({

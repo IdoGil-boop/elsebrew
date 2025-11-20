@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { migrateAnonymousDataToUser } from '@/lib/dynamodb';
+import { migrateAnonymousDataToUser, mergeRateLimitData } from '@/lib/dynamodb';
 import { getClientIp, hashIp } from '@/lib/ip-utils';
 
 export const runtime = 'nodejs';
@@ -14,14 +14,17 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Get IP hash for this user
+    // Get IP for this user
     const ip = getClientIp(request);
     const ipHash = await hashIp(ip);
 
     console.log(`[Migration API] Starting migration for user ${auth.user.sub} from IP ${ip}`);
 
-    // Migrate data
+    // Migrate place interactions (uses hashed IP)
     const result = await migrateAnonymousDataToUser(ipHash, auth.user.sub);
+
+    // Merge rate limit data (uses raw IP with ip- prefix)
+    await mergeRateLimitData(ip, auth.user.sub);
 
     return NextResponse.json({
       success: true,

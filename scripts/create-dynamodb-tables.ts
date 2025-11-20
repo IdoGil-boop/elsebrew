@@ -19,6 +19,8 @@ const TABLES = {
   SAVED_PLACES: process.env.DYNAMODB_SAVED_PLACES_TABLE || 'elsebrew-saved-places',
   SEARCH_HISTORY: process.env.DYNAMODB_SEARCH_HISTORY_TABLE || 'elsebrew-search-history',
   PLACE_INTERACTIONS: process.env.DYNAMODB_PLACE_INTERACTIONS_TABLE || 'elsebrew-place-interactions',
+  RATE_LIMITS: process.env.DYNAMODB_RATE_LIMITS_TABLE || 'elsebrew-rate-limits',
+  EMAIL_SUBSCRIPTIONS: process.env.DYNAMODB_EMAIL_SUBSCRIPTIONS_TABLE || 'elsebrew-email-subscriptions',
 };
 
 async function tableExists(tableName: string): Promise<boolean> {
@@ -124,6 +126,47 @@ async function createPlaceInteractionsTable() {
   console.log(`✓ Created table ${tableName}`);
 }
 
+async function createRateLimitsTable() {
+  const tableName = TABLES.RATE_LIMITS;
+
+  if (await tableExists(tableName)) {
+    console.log(`✓ Table ${tableName} already exists`);
+    return;
+  }
+
+  await client.send(
+    new CreateTableCommand({
+      TableName: tableName,
+      KeySchema: [{ AttributeName: 'userId', KeyType: 'HASH' }],
+      AttributeDefinitions: [{ AttributeName: 'userId', AttributeType: 'S' }],
+      BillingMode: 'PAY_PER_REQUEST',
+      // Note: TTL is enabled via the table's TimeToLiveSpecification after creation
+      // or can be set via AWS Console. The ttl attribute will be automatically cleaned up.
+    })
+  );
+  console.log(`✓ Created table ${tableName}`);
+  console.log(`  Note: Enable TTL on the 'ttl' attribute via AWS Console for automatic cleanup`);
+}
+
+async function createEmailSubscriptionsTable() {
+  const tableName = TABLES.EMAIL_SUBSCRIPTIONS;
+
+  if (await tableExists(tableName)) {
+    console.log(`✓ Table ${tableName} already exists`);
+    return;
+  }
+
+  await client.send(
+    new CreateTableCommand({
+      TableName: tableName,
+      KeySchema: [{ AttributeName: 'email', KeyType: 'HASH' }],
+      AttributeDefinitions: [{ AttributeName: 'email', AttributeType: 'S' }],
+      BillingMode: 'PAY_PER_REQUEST',
+    })
+  );
+  console.log(`✓ Created table ${tableName}`);
+}
+
 async function main() {
   console.log('Creating DynamoDB tables...\n');
 
@@ -132,6 +175,8 @@ async function main() {
     await createSavedPlacesTable();
     await createSearchHistoryTable();
     await createPlaceInteractionsTable();
+    await createRateLimitsTable();
+    await createEmailSubscriptionsTable();
 
     console.log('\n✓ All tables created successfully!');
     console.log('\nNote: Tables may take a few seconds to become active.');

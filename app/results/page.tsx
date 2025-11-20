@@ -145,6 +145,89 @@ function ResultsContent() {
           return;
         }
 
+        // Check rate limit before performing search
+        const authToken = getAuthToken();
+        const rateLimitHeaders: HeadersInit = {};
+        if (authToken) {
+          rateLimitHeaders['Authorization'] = `Bearer ${authToken}`;
+        }
+
+        let rateLimitData;
+        try {
+          console.log('[Results] Checking rate limit before search...');
+          const rateLimitResponse = await fetch('/api/rate-limit/check', {
+            method: 'POST',
+            headers: rateLimitHeaders,
+          });
+
+          console.log('[Results] Rate limit response status:', rateLimitResponse.status);
+
+          if (!rateLimitResponse.ok) {
+            logger.error('[Results] Rate limit API error:', rateLimitResponse.status, rateLimitResponse.statusText);
+          }
+
+          rateLimitData = await rateLimitResponse.json();
+          console.log('[Results] Rate limit check result:', {
+            allowed: rateLimitData.allowed,
+            currentCount: rateLimitData.currentCount,
+            remaining: rateLimitData.remaining,
+            limit: rateLimitData.limit,
+            blockedBy: rateLimitData.blockedBy,
+          });
+          logger.debug('[Results] Rate limit check:', {
+            allowed: rateLimitData.allowed,
+            currentCount: rateLimitData.currentCount,
+            remaining: rateLimitData.remaining,
+          });
+        } catch (error) {
+          console.error('[Results] Rate limit check failed:', error);
+          logger.error('[Results] Rate limit check failed:', error);
+          // On error, fail closed (block the request) to be safe
+          setToastMessage('Unable to verify rate limit. Please try again later.');
+          setToastType('error');
+          setShowToast(true);
+          setIsLoading(false);
+          isSearchInProgress.current = false;
+          return;
+        }
+
+        if (!rateLimitData.allowed) {
+          // Format reset time nicely
+          const resetAt = new Date(rateLimitData.resetAt);
+          const now = new Date();
+          const hoursUntilReset = Math.ceil((resetAt.getTime() - now.getTime()) / (1000 * 60 * 60));
+          const minutesUntilReset = Math.ceil((resetAt.getTime() - now.getTime()) / (1000 * 60));
+          
+          let timeUntilReset: string;
+          if (hoursUntilReset >= 1) {
+            timeUntilReset = hoursUntilReset === 1 ? '1 hour' : `${hoursUntilReset} hours`;
+          } else {
+            timeUntilReset = minutesUntilReset === 1 ? '1 minute' : `${minutesUntilReset} minutes`;
+          }
+
+          const resetTime = resetAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+          
+          // Build message - only suggest sign-in if not already authenticated
+          const isAuthenticated = rateLimitData.isAuthenticated !== false; // Default to true if not provided
+          let message = `You've reached your search limit of ${rateLimitData.limit} searches per 12 hours. Your limit will refresh in ${timeUntilReset} (at ${resetTime}).`;
+        
+          
+          setToastMessage(message);
+          setToastType('info');
+          setShowToast(true);
+          setIsLoading(false);
+          isSearchInProgress.current = false;
+          
+          // If this is a new search from home page (not a refinement), redirect back to home
+          // If this is a refinement from results page, stay on results page with current results
+          if (!isRefinement) {
+            // New search from home - redirect back to search screen
+            router.push('/');
+          }
+          // If refinement, stay on results page - current results will remain visible
+          return;
+        }
+
         const vibes: VibeToggles = normalizeVibes(JSON.parse(vibesParam));
 
         // Parse source place IDs early (needed for search ID generation)
@@ -170,8 +253,41 @@ function ResultsContent() {
           freeText || undefined
         );
 
-        // If this is a refinement, try to serve next batch from cache first
+        // Check if this is a refinement that just shows more cached results (same searchId)
+        // vs a modification (different searchId) - modifications should count toward rate limit
+        let isJustShowingMoreResults = false;
+        
         if (isRefinement) {
+          // Check if searchId exists in cache (same search = just showing more results, don't count)
+          // If searchId doesn't exist = modification (count it, rate limit already checked above)
+          try {
+            const authToken = getAuthToken();
+            const headers: HeadersInit = {};
+            if (authToken) {
+              headers['Authorization'] = `Bearer ${authToken}`;
+            }
+
+            const existingStateResponse = await fetch(
+              `/api/search-state?searchId=${encodeURIComponent(searchId)}`,
+              { headers }
+            );
+
+            if (existingStateResponse.ok) {
+              const { searchState } = await existingStateResponse.json();
+              // If search state exists with this exact searchId, it's just showing more results
+              if (searchState && searchState.searchId === searchId) {
+                isJustShowingMoreResults = true;
+              }
+            }
+          } catch (error) {
+            logger.warn('[Results] Error checking if refinement is just showing more results:', error);
+            // On error, assume it's a modification (count it)
+          }
+        }
+
+        // If this is a refinement with same searchId (just showing more cached results), skip rate limit
+        // Rate limit was already checked above for new searches and modifications
+        if (isRefinement && isJustShowingMoreResults) {
           logger.debug('[Results] Refinement detected, checking for cached results...');
           try {
             const authToken = getAuthToken();
@@ -763,7 +879,8 @@ function ResultsContent() {
     );
   }
 
-  if (results.length === 0) {
+  // Don't show "No matches found" if we're still loading
+  if (results.length === 0 && !isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center max-w-md">
