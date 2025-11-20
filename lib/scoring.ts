@@ -99,7 +99,7 @@ export const buildSearchKeywords = (
 export const scoreCafe = (
   candidate: PlaceBasicInfo,
   source: PlaceBasicInfo,
-  _vibes: VibeToggles,
+  vibes: VibeToggles,
   keywords: string[],
   isRefinement: boolean = false,
   originPlaces: PlaceBasicInfo[] = []
@@ -187,6 +187,22 @@ export const scoreCafe = (
   if (candidate.servesBreakfast || candidate.servesBrunch) {
     score += 0.5;
     matchedKeywords.push('All-day dining');
+  }
+
+  // Vibe-based scoring - boost places that match selected vibes
+  if (vibes.allowsDogs && candidate.allowsDogs) {
+    score += 1.5;
+    matchedKeywords.push('Allows dogs');
+  }
+
+  if (vibes.servesVegetarian && candidate.servesVegetarianFood) {
+    score += 1.5;
+    matchedKeywords.push('Serves vegetarian');
+  }
+
+  if (vibes.brunch && candidate.servesBrunch) {
+    score += 1.5;
+    matchedKeywords.push('Brunch');
   }
 
   // If this is a refinement, prioritize keywords from free text and vibes

@@ -3,8 +3,18 @@
 @tailwind utilities;
 
 @layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    @apply overflow-x-hidden overflow-y-visible;
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply bg-offwhite text-charcoal antialiased;
+    @apply bg-offwhite text-charcoal antialiased overflow-x-hidden overflow-y-visible;
+    width: 100%;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -33,6 +43,15 @@
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 }
 

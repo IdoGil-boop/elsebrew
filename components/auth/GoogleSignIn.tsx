@@ -141,8 +141,9 @@ export default function GoogleSignIn({ onSignIn }: GoogleSignInProps) {
       window.google.accounts.id.renderButton(buttonRef.current, {
         theme: 'outline',
         size: 'medium',
-        text: 'signin_with',
+        text: 'signin',
         shape: 'rectangular',
+        width: window.innerWidth < 640 ? 180 : 240,
       });
 
       console.log('[GoogleSignIn] Button rendered successfully');

@@ -23,39 +23,34 @@ npm install
 
 ## Step 2: Google Maps API Setup
 
-### Enable APIs
+Elsebrew requires **two API keys** for security best practices:
+- **Client-side key** for Maps JavaScript API (displayed in browser)
+- **Server-side key** for Places API calls (server-side only)
+
+**📘 Full Guide:** See [GOOGLE_API_KEYS_SETUP.md](./GOOGLE_API_KEYS_SETUP.md) for detailed step-by-step instructions.
+
+### Quick Setup
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project (or select existing)
 3. Navigate to "APIs & Services" → "Library"
-4. Enable these 4 APIs:
+4. Enable these APIs:
    - **Maps JavaScript API**
-   - **Places API**
-   - **Geocoding API**
-   - **Maps Embed API**
+   - **Places API (New)**
 
-### Create API Key
+5. Create **two API keys**:
 
-1. Go to "APIs & Services" → "Credentials"
-2. Click "Create Credentials" → "API Key"
-3. Copy the key (you'll add it to `.env.local` shortly)
+   **Client-Side Key:**
+   - API restrictions: Maps JavaScript API only
+   - Application restrictions: HTTP referrers
+     - `http://localhost:3000/*`
+     - `https://yourdomain.com/*` (add later)
 
-### Restrict API Key (IMPORTANT!)
+   **Server-Side Key:**
+   - API restrictions: Places API (New) only
+   - Application restrictions: None (for serverless) or IP addresses
 
-1. Click on your newly created API key
-2. Under "Application restrictions":
-   - Select "HTTP referrers (websites)"
-   - Add:
-     - `http://localhost:3000/*` (for development)
-     - `https://yourdomain.com/*` (for production - add this later)
-3. Under "API restrictions":
-   - Select "Restrict key"
-   - Check only these 4 APIs:
-     - Maps JavaScript API
-     - Places API
-     - Geocoding API
-     - Maps Embed API
-4. Click "Save"
+6. Copy both keys for Step 5 below
 
 ---
 
@@ -105,7 +100,11 @@ cp .env.example .env.local
 
 ```bash
 # Required
+# Client-side key (for Maps JS API in browser)
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=AIzaSy...
+# Server-side key (for Places API from API routes)
+GOOGLE_MAPS_API_KEY=AIzaSy...
+
 NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID=123456789-abc...apps.googleusercontent.com
 OPENAI_API_KEY=sk-...
 

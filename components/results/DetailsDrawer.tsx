@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { CafeMatch } from '@/types';
 import { storage } from '@/lib/storage';
 import { analytics } from '@/lib/analytics';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface DetailsDrawerProps {
   result: CafeMatch | null;
@@ -14,6 +14,8 @@ interface DetailsDrawerProps {
 export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
   const [isSaved, setIsSaved] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const carouselRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const checkSaved = async () => {
@@ -27,30 +29,102 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
     checkSaved();
   }, [result]);
 
+  // Handle browser back button to close drawer
+  useEffect(() => {
+    if (!result) return;
+
+    const handlePopState = () => {
+      onClose();
+    };
+
+    // Push a dummy state when drawer opens
+    window.history.pushState({ drawer: true }, '');
+
+    // Listen for back button
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [result, onClose]);
+
   if (!result) return null;
 
   const { place, matchedKeywords, reasoning } = result;
 
-  const getPhotoUrl = () => {
-    // Check for cached photoUrl first (from restored results)
-    if (place.photoUrl) {
-      return place.photoUrl;
-    }
-    // Otherwise use Google Maps photos
+  // Get all available photo URLs (already limited to 4 at API level)
+  const getPhotoUrls = (): string[] => {
+    const urls: string[] = [];
+    
+    // Photos are already limited to 4 in places-search.ts to control API costs
     if (place.photos && place.photos.length > 0) {
-      try {
-        const photo = place.photos[0] as any;
-        // Try new API first (getURI), then fallback to legacy (getUrl)
-        if (typeof photo.getURI === 'function') {
-          return photo.getURI({ maxWidth: 800 });
-        } else if (typeof photo.getUrl === 'function') {
-          return photo.getUrl({ maxWidth: 800 });
+      for (let i = 0; i < place.photos.length; i++) {
+        try {
+          const photo = place.photos[i] as any;
+          let url: string | null = null;
+          
+          // Try new API first (getURI), then fallback to legacy (getUrl)
+          if (typeof photo.getURI === 'function') {
+            url = photo.getURI({ maxWidth: 800 });
+          } else if (typeof photo.getUrl === 'function') {
+            url = photo.getUrl({ maxWidth: 800 });
+          }
+          
+          if (url) {
+            urls.push(url);
+          }
+        } catch (error) {
+          console.warn('Error getting photo URL:', error);
         }
-      } catch (error) {
-        console.warn('Error getting photo URL:', error);
       }
     }
-    return null;
+    
+    // Fallback to cached photoUrl if no photos from API
+    if (urls.length === 0 && place.photoUrl) {
+      urls.push(place.photoUrl);
+    }
+    
+    return urls;
+  };
+
+  const photoUrls = getPhotoUrls();
+  
+  // Reset photo index when result changes
+  useEffect(() => {
+    setCurrentPhotoIndex(0);
+  }, [result]);
+
+  const scrollToPhoto = (index: number) => {
+    if (!carouselRef.current) return;
+    const container = carouselRef.current;
+    const photoWidth = container.clientWidth;
+    container.scrollTo({
+      left: index * photoWidth,
+      behavior: 'smooth',
+    });
+    setCurrentPhotoIndex(index);
+  };
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const container = e.currentTarget;
+    const photoWidth = container.clientWidth;
+    const scrollLeft = container.scrollLeft;
+    const newIndex = Math.round(scrollLeft / photoWidth);
+    if (newIndex !== currentPhotoIndex && newIndex >= 0 && newIndex < photoUrls.length) {
+      setCurrentPhotoIndex(newIndex);
+    }
+  };
+
+  const goToPrevious = () => {
+    if (currentPhotoIndex > 0) {
+      scrollToPhoto(currentPhotoIndex - 1);
+    }
+  };
+
+  const goToNext = () => {
+    if (currentPhotoIndex < photoUrls.length - 1) {
+      scrollToPhoto(currentPhotoIndex + 1);
+    }
   };
 
   const getMapsEmbedUrl = () => {
@@ -65,7 +139,7 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
   const handleSave = async () => {
     if (isSaved) return; // Already saved, do nothing
 
-    const photoUrl = getPhotoUrl();
+    const photoUrl = photoUrls.length > 0 ? photoUrls[0] : null;
     const userProfile = storage.getUserProfile();
 
     // Save to API if logged in
@@ -184,7 +258,6 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
     }
   };
 
-  const photoUrl = getPhotoUrl();
   const getPriceLevel = (level?: number) => {
     if (!level) return '';
     return '$'.repeat(level);
@@ -204,32 +277,110 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
           animate={{ y: 0 }}
           exit={{ y: '100%' }}
           transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-          className="bg-white rounded-t-2xl md:rounded-2xl w-full md:max-w-2xl max-h-[90vh] overflow-y-auto"
+          className="bg-white rounded-t-2xl md:rounded-2xl w-full md:max-w-2xl max-h-[90vh] overflow-y-auto relative"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Header with photo */}
-          {photoUrl && (
-            <div className="w-full h-64 relative">
-              <img src={photoUrl} alt={place.displayName} className="w-full h-full object-cover" />
-              <button
-                onClick={onClose}
-                className="absolute top-4 right-4 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-100 transition-colors"
+          {/* Sticky close button - always visible */}
+          <button
+            onClick={onClose}
+            className="sticky top-4 right-4 ml-auto mr-4 mt-4 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-100 transition-colors z-10 border border-gray-200"
+            style={{ float: 'right' }}
+          >
+            ✕
+          </button>
+
+          {/* Header with photo carousel */}
+          {photoUrls.length > 0 && (
+            <div className="w-full h-64 relative -mt-14 overflow-hidden">
+              <div
+                ref={carouselRef}
+                className="w-full h-full flex overflow-x-auto snap-x snap-mandatory scrollbar-hide"
+                onScroll={handleScroll}
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               >
-                ✕
-              </button>
+                {photoUrls.map((url, index) => (
+                  <div
+                    key={index}
+                    className="w-full h-full flex-shrink-0 snap-center"
+                  >
+                    <img
+                      src={url}
+                      alt={`${place.displayName} - Photo ${index + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ))}
+              </div>
+              
+              {/* Navigation arrows */}
+              {photoUrls.length > 1 && (
+                <>
+                  {currentPhotoIndex > 0 && (
+                    <button
+                      onClick={goToPrevious}
+                      className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all z-20"
+                      aria-label="Previous photo"
+                    >
+                      <svg
+                        className="w-5 h-5 text-gray-800"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15 19l-7-7 7-7"
+                        />
+                      </svg>
+                    </button>
+                  )}
+                  {currentPhotoIndex < photoUrls.length - 1 && (
+                    <button
+                      onClick={goToNext}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all z-20"
+                      aria-label="Next photo"
+                    >
+                      <svg
+                        className="w-5 h-5 text-gray-800"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5l7 7-7 7"
+                        />
+                      </svg>
+                    </button>
+                  )}
+                </>
+              )}
+              
+              {/* Dot indicators */}
+              {photoUrls.length > 1 && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20">
+                  {photoUrls.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => scrollToPhoto(index)}
+                      className={`w-2 h-2 rounded-full transition-all ${
+                        index === currentPhotoIndex
+                          ? 'bg-white w-6'
+                          : 'bg-white/50 hover:bg-white/75'
+                      }`}
+                      aria-label={`Go to photo ${index + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
-          <div className="p-6">
-            {/* Close button if no photo */}
-            {!photoUrl && (
-              <button
-                onClick={onClose}
-                className="absolute top-4 right-4 w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors"
-              >
-                ✕
-              </button>
-            )}
+          <div className="p-4 sm:p-6 relative z-10 bg-white">
 
             {/* Title and rating */}
             <div className="mb-4">

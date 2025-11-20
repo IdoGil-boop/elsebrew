@@ -65,7 +65,7 @@ export default function ResultsList({
   };
 
   return (
-    <div className="space-y-4 overflow-y-auto overflow-x-visible h-full px-6 py-6">
+    <div className="space-y-3 sm:space-y-4 overflow-y-auto overflow-x-visible h-full px-3 sm:px-6 py-3 sm:py-6">
       {results.map((result, index) => {
         const isSelected = selectedIndex === index;
         const isHovered = hoveredIndex === index;
@@ -91,10 +91,10 @@ export default function ResultsList({
             onMouseEnter={() => onHover(index)}
             onMouseLeave={() => onHover(null)}
           >
-            <div className="flex gap-4">
+            <div className="flex gap-3 sm:gap-4">
               {/* Photo */}
               {photoUrl && (
-                <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
                   <img
                     src={photoUrl}
                     alt={result.place.displayName}
@@ -106,8 +106,8 @@ export default function ResultsList({
               {/* Content */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between mb-1">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <h3 className="font-semibold text-lg truncate">
+                  <div className="flex items-center gap-1 sm:gap-2 flex-1 min-w-0">
+                    <h3 className="font-semibold text-base sm:text-lg truncate">
                       {index + 1}. {result.place.displayName}
                     </h3>
                     {savedPlaceIds.has(result.place.id) && (

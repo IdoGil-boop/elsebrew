@@ -57,25 +57,31 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### Required Environment Variables
 
-#### Google Maps API Key
+#### Google Maps API Keys
 
+Elsebrew requires **two API keys** for security best practices:
+
+1. **Client-side key** (`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`) - for Maps JavaScript API in the browser
+2. **Server-side key** (`GOOGLE_MAPS_API_KEY`) - for Places API calls from Next.js API routes
+
+**Quick Setup:**
+
+See [docs/GOOGLE_API_KEYS_SETUP.md](./docs/GOOGLE_API_KEYS_SETUP.md) for detailed step-by-step instructions.
+
+**TL;DR:**
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select an existing one
-3. Enable these APIs:
-   - Maps JavaScript API
-   - Places API
-   - Geocoding API
-   - Maps Embed API
-4. Create credentials → API Key
-5. **Important:** Restrict your API key:
-   - **Application restrictions:** HTTP referrers (websites)
-     - Add your domain (e.g., `https://yourdomain.com/*`)
-     - For development: `http://localhost:3000/*`
-   - **API restrictions:** Restrict to the 4 APIs listed above
-6. Add to `.env.local`:
+2. Enable: **Maps JavaScript API** and **Places API (New)**
+3. Create two API keys with different restrictions:
+   - Client key: HTTP referrers + Maps JavaScript API only
+   - Server key: IP addresses (or None) + Places API (New) only
+4. Add to `.env.local`:
 
-```
-NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
+```bash
+# Client-side (for Maps JS API)
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=AIza...
+
+# Server-side (for Places API)
+GOOGLE_MAPS_API_KEY=AIza...
 ```
 
 #### Google OAuth Client ID (for Sign In with Google)

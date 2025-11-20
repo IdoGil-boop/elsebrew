@@ -59,9 +59,19 @@ git push origin main
 
    **Required:**
    ```
+   # Client-side key (for Maps JS API in browser)
    NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=AIzaSy...
+
+   # Server-side key (for Places API from Next.js API routes)
+   GOOGLE_MAPS_API_KEY=AIzaSy...
+
    NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID=123456789-abc...apps.googleusercontent.com
    OPENAI_API_KEY=sk-...
+
+   # DynamoDB credentials
+   DYNAMODB_ACCESS_KEY_ID=AKIA...
+   DYNAMODB_SECRET_ACCESS_KEY=...
+   DYNAMODB_REGION=us-east-1
    ```
 
    **Optional:**

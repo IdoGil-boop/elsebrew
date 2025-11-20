@@ -5,6 +5,27 @@ export interface VibeToggles {
   nightOwl: boolean;
   cozy: boolean;
   minimalist: boolean;
+  allowsDogs: boolean;
+  servesVegetarian: boolean;
+  brunch: boolean;
+}
+
+/**
+ * Normalize vibes object to ensure all fields are present with defaults
+ * Useful for backward compatibility when parsing from JSON
+ */
+export function normalizeVibes(vibes: Partial<VibeToggles>): VibeToggles {
+  return {
+    roastery: vibes.roastery ?? false,
+    lightRoast: vibes.lightRoast ?? false,
+    laptopFriendly: vibes.laptopFriendly ?? false,
+    nightOwl: vibes.nightOwl ?? false,
+    cozy: vibes.cozy ?? false,
+    minimalist: vibes.minimalist ?? false,
+    allowsDogs: vibes.allowsDogs ?? false,
+    servesVegetarian: vibes.servesVegetarian ?? false,
+    brunch: vibes.brunch ?? false,
+  };
 }
 
 export interface SearchParams {

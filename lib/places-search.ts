@@ -1,5 +1,57 @@
 import { PlaceBasicInfo, VibeToggles, CafeMatch } from '@/types';
 import { buildSearchKeywords, scoreCafe, calculateDistance } from './scoring';
+import { AdvancedPlaceFieldValues } from './googlePlaceFields';
+
+async function fetchAdvancedPlaceFields(
+  placeIds: string[],
+  vibes: VibeToggles,
+  keywords: string[],
+  freeText: string = '',
+): Promise<Record<string, AdvancedPlaceFieldValues>> {
+  if (!placeIds.length) {
+    return {};
+  }
+
+  const uniqueIds = Array.from(new Set(placeIds)).slice(0, 20); // searchByText caps at 20 anyway
+
+  try {
+    const response = await fetch('/api/google/places/details', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        placeIds: uniqueIds,
+        vibes,
+        keywords,
+        freeText,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn(
+        '[Places Search] Advanced fields API returned non-OK status:',
+        response.status,
+        response.statusText,
+      );
+      return {};
+    }
+
+    const data = await response.json();
+    if (!data || typeof data !== 'object' || !data.fieldsByPlaceId) {
+      console.warn(
+        '[Places Search] Advanced fields API responded without fieldsByPlaceId payload',
+      );
+      return {};
+    }
+
+    return data.fieldsByPlaceId as Record<string, AdvancedPlaceFieldValues>;
+  } catch (error) {
+    console.warn(
+      '[Places Search] Failed to fetch advanced place fields:',
+      error instanceof Error ? error.message : error,
+    );
+    return {};
+  }
+}
 
 export interface SearchCafesResult {
   results: CafeMatch[];
@@ -68,6 +120,18 @@ function buildVibeEnhancedQuery(baseKeywords: string[], vibes: VibeToggles): str
     vibeKeywords.push('minimalist', 'modern', 'clean design');
   }
 
+  if (vibes.allowsDogs) {
+    vibeKeywords.push('dog friendly', 'pet friendly');
+  }
+
+  if (vibes.servesVegetarian) {
+    vibeKeywords.push('vegetarian', 'vegan options');
+  }
+
+  if (vibes.brunch) {
+    vibeKeywords.push('brunch', 'breakfast');
+  }
+
   // Combine base keywords with top 2 vibe keywords
   const allKeywords = [...baseKeywords.slice(0, 2), ...vibeKeywords.slice(0, 2)];
   return allKeywords.slice(0, 5).join(' ');
@@ -85,7 +149,8 @@ export const searchCafes = async (
   destinationPlaceId?: string, // Place ID for reverse geocoding verification
   originPlaces: PlaceBasicInfo[] = [], // All origin places for type overlap scoring
   placeIdsToFilter: string[] = [], // Place IDs to filter out (seen but unsaved)
-  pageToken?: string // Token for fetching next page of results
+  pageToken?: string, // Token for fetching next page of results
+  freeText: string = '' // Free text query for field relevance detection
 ): Promise<SearchCafesResult> => {
   const google = googleMaps;
   const keywords = customKeywords || buildSearchKeywords(sourcePlace, vibes);
@@ -156,8 +221,8 @@ export const searchCafes = async (
   });
 
   // Use new Text Search API with personalized query + type filtering
-  // Note: Atmosphere & amenity fields are requested separately via fetchFields()
-  // because they may not be available in searchByText response
+  // Note: Atmosphere & amenity fields are fetched separately via REST API
+  // because the JavaScript SDK doesn't support them yet
   // Reference: https://developers.google.com/maps/documentation/places/web-service/data-fields
   const searchRequest: any = {
     textQuery, // Personalized query from user's loved cafe vibes
@@ -186,34 +251,6 @@ export const searchCafes = async (
     searchRequest.pageToken = pageToken;
     console.log('[Places Search] Fetching next page with token:', pageToken);
   }
-
-  // Fields to fetch separately for each place (Advanced Data)
-  // These may require Advanced Data SKU and are not available in searchByText
-  const additionalFields = [
-    'outdoorSeating',
-    'takeout',
-    'delivery',
-    'dineIn',
-    'reservable',
-    'goodForGroups',
-    'goodForChildren',
-    'goodForWatchingSports',
-    'liveMusic',
-    'servesCoffee',
-    'servesBreakfast',
-    'servesBrunch',
-    'servesLunch',
-    'servesDinner',
-    'servesBeer',
-    'servesWine',
-    'servesVegetarianFood',
-    'allowsDogs',
-    'restroom',
-    'menuForChildren',
-    'accessibilityOptions',
-    'paymentOptions',
-    'parkingOptions',
-  ];
 
   // Use different location strategies based on destination type
   if (isAreaDestination) {
@@ -330,30 +367,8 @@ export const searchCafes = async (
       });
     });
 
-    // Fetch additional fields (atmosphere & amenities) for each place
-    // These fields may not be available in searchByText and need to be fetched separately
-    console.log('[Places Search] Fetching additional fields for each place...');
-    try {
-      await Promise.all(
-        places.map(async (place: any) => {
-          try {
-            // Fetch additional fields using Place.fetchFields()
-            await place.fetchFields({ fields: additionalFields });
-            console.log(`[Places Search] Fetched additional fields for: ${place.displayName}`);
-          } catch (error) {
-            // If fetchFields fails, log but continue (fields will be undefined)
-            console.warn(`[Places Search] Could not fetch additional fields for ${place.displayName}:`,
-              error instanceof Error ? error.message : 'Unknown error');
-          }
-        })
-      );
-    } catch (error) {
-      console.warn('[Places Search] Error fetching additional fields:', error);
-      // Continue anyway - places will just have undefined values for these fields
-    }
-
     // Filter and prepare places (work directly with new API format)
-    const validPlaces: PlaceBasicInfo[] = places
+    const filteredPlaces = places
       .filter((place: any) => {
         // Basic validation
         if (!place.id || !place.rating) return false;
@@ -363,10 +378,29 @@ export const searchCafes = async (
           console.log(`[Places Search] Filtering out seen place: ${place.displayName}`);
           return false;
         }
-
         return true;
-      })
-      .map((place: any) => ({
+      });
+
+    const placeIds = filteredPlaces.map((place: any) => place.id);
+    console.log('[Places Search] Fetching advanced fields for', placeIds.length, 'places');
+    const advancedFieldsByPlaceId = await fetchAdvancedPlaceFields(
+      placeIds,
+      vibes,
+      keywords,
+      freeText,
+    );
+    const fieldsCount = Object.keys(advancedFieldsByPlaceId).length;
+    const fieldsWithData = Object.values(advancedFieldsByPlaceId).filter(
+      (fields) => Object.keys(fields).length > 0,
+    ).length;
+    console.log(
+      `[Places Search] Advanced fields fetched: ${fieldsCount} places, ${fieldsWithData} with data`,
+    );
+
+    const validPlaces: PlaceBasicInfo[] = filteredPlaces.map((place: any) => {
+      const advancedFields = advancedFieldsByPlaceId[place.id] || {};
+
+      return {
         id: place.id,
         displayName: place.displayName || 'Unknown',
         formattedAddress: place.formattedAddress,
@@ -377,45 +411,49 @@ export const searchCafes = async (
         userRatingCount: place.userRatingCount,
         priceLevel: place.priceLevel,
         regularOpeningHours: place.regularOpeningHours,
-        photos: place.photos,
+        photos: place.photos ? place.photos.slice(0, 4) : undefined, // Limit to 4 photos to control costs
         editorialSummary: place.editorialSummary?.text || place.editorialSummary?.overview,
         // Atmosphere & Amenities
-        outdoorSeating: place.outdoorSeating,
-        takeout: place.takeout,
-        delivery: place.delivery,
-        dineIn: place.dineIn,
-        reservable: place.reservable,
-        goodForGroups: place.goodForGroups,
-        goodForChildren: place.goodForChildren,
-        goodForWatchingSports: place.goodForWatchingSports,
-        liveMusic: place.liveMusic,
-        servesCoffee: place.servesCoffee,
-        servesBreakfast: place.servesBreakfast,
-        servesBrunch: place.servesBrunch,
-        servesLunch: place.servesLunch,
-        servesDinner: place.servesDinner,
-        servesBeer: place.servesBeer,
-        servesWine: place.servesWine,
-        servesVegetarianFood: place.servesVegetarianFood,
-        allowsDogs: place.allowsDogs,
-        restroom: place.restroom,
-        menuForChildren: place.menuForChildren,
-        accessibilityOptions: place.accessibilityOptions,
-        paymentOptions: place.paymentOptions,
-        parkingOptions: place.parkingOptions,
-      }));
+        outdoorSeating: advancedFields.outdoorSeating ?? place.outdoorSeating,
+        takeout: advancedFields.takeout ?? place.takeout,
+        delivery: advancedFields.delivery ?? place.delivery,
+        dineIn: advancedFields.dineIn ?? place.dineIn,
+        reservable: advancedFields.reservable ?? place.reservable,
+        goodForGroups: advancedFields.goodForGroups ?? place.goodForGroups,
+        goodForChildren: advancedFields.goodForChildren ?? place.goodForChildren,
+        goodForWatchingSports:
+          advancedFields.goodForWatchingSports ?? place.goodForWatchingSports,
+        liveMusic: advancedFields.liveMusic ?? place.liveMusic,
+        servesCoffee: advancedFields.servesCoffee ?? place.servesCoffee,
+        servesBreakfast: advancedFields.servesBreakfast ?? place.servesBreakfast,
+        servesBrunch: advancedFields.servesBrunch ?? place.servesBrunch,
+        servesLunch: advancedFields.servesLunch ?? place.servesLunch,
+        servesDinner: advancedFields.servesDinner ?? place.servesDinner,
+        servesBeer: advancedFields.servesBeer ?? place.servesBeer,
+        servesWine: advancedFields.servesWine ?? place.servesWine,
+        servesVegetarianFood:
+          advancedFields.servesVegetarianFood ?? place.servesVegetarianFood,
+        allowsDogs: advancedFields.allowsDogs ?? place.allowsDogs,
+        restroom: advancedFields.restroom ?? place.restroom,
+        menuForChildren: advancedFields.menuForChildren ?? place.menuForChildren,
+        accessibilityOptions:
+          advancedFields.accessibilityOptions ?? place.accessibilityOptions,
+        paymentOptions: advancedFields.paymentOptions ?? place.paymentOptions,
+        parkingOptions: advancedFields.parkingOptions ?? place.parkingOptions,
+      };
+    });
 
     console.log('[Places Search] Valid places', {
       count: validPlaces.length,
     });
 
     // Filter places to only include those within the destination area (for area destinations)
-    let filteredPlaces = validPlaces;
+    let verifiedPlaces = validPlaces;
     if (isAreaDestination && destinationPlaceId) {
       console.log('[Places Search] Post-filtering results to verify they are within destination area');
 
       const geocoder = new google.maps.Geocoder();
-      const verificationPromises = validPlaces.map(async (place) => {
+      const verificationPromises = validPlaces.map(async (place: PlaceBasicInfo) => {
         try {
           const result = await geocoder.geocode({
             location: place.location
@@ -443,12 +481,12 @@ export const searchCafes = async (
       });
 
       const verificationResults = await Promise.all(verificationPromises);
-      const beforeFilterCount = filteredPlaces.length;
-      filteredPlaces = verificationResults
+      const beforeFilterCount = verifiedPlaces.length;
+      verifiedPlaces = verificationResults
         .filter(r => r.isWithinDestination)
         .map(r => r.place);
 
-      const filteredOutCount = beforeFilterCount - filteredPlaces.length;
+      const filteredOutCount = beforeFilterCount - verifiedPlaces.length;
       if (filteredOutCount > 0) {
         console.log(`[Places Search] Filtered out ${filteredOutCount} place(s) outside destination area`);
       }
@@ -458,8 +496,8 @@ export const searchCafes = async (
     // Create a set of previously seen place IDs for quick lookup
     const seenPlaceIds = new Set(placeIdsToFilter);
 
-    const allScoredResults: CafeMatch[] = filteredPlaces
-      .map(place => {
+    const allScoredResults: CafeMatch[] = verifiedPlaces
+      .map((place: PlaceBasicInfo) => {
         const { score, matchedKeywords, typeOverlapDetails } = scoreCafe(
           place,
           sourcePlace,
@@ -489,7 +527,7 @@ export const searchCafes = async (
           typeOverlapDetails, // Include type overlap details for LLM
         };
       })
-      .sort((a, b) => b.score - a.score);
+      .sort((a: CafeMatch, b: CafeMatch) => b.score - a.score);
 
     // Return top 5 for immediate display, but also return all results for caching
     const topResults = allScoredResults.slice(0, 5);

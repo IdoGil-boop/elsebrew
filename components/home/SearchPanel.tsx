@@ -30,6 +30,9 @@ export default function SearchPanel() {
     nightOwl: false,
     cozy: false,
     minimalist: false,
+    allowsDogs: false,
+    servesVegetarian: false,
+    brunch: false,
   });
 
   useEffect(() => {
@@ -170,6 +173,9 @@ export default function SearchPanel() {
     { key: 'nightOwl', label: 'Night-owl' },
     { key: 'cozy', label: 'Cozy' },
     { key: 'minimalist', label: 'Minimalist' },
+    { key: 'allowsDogs', label: 'Allows dogs' },
+    { key: 'servesVegetarian', label: 'Serves vegetarian' },
+    { key: 'brunch', label: 'Brunch' },
   ];
 
   return (

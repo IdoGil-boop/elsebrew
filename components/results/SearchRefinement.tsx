@@ -33,6 +33,9 @@ export default function SearchRefinement({
     { key: 'nightOwl' as const, label: 'Night owl', icon: '🌙' },
     { key: 'cozy' as const, label: 'Cozy', icon: '🛋️' },
     { key: 'minimalist' as const, label: 'Minimalist', icon: '⚪' },
+    { key: 'allowsDogs' as const, label: 'Allows dogs', icon: '🐕' },
+    { key: 'servesVegetarian' as const, label: 'Serves vegetarian', icon: '🥗' },
+    { key: 'brunch' as const, label: 'Brunch', icon: '🥐' },
   ];
 
   return (

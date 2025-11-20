@@ -178,6 +178,18 @@ function buildVibeKeywords(vibes: VibeToggles): string[] {
     keywords.push('minimalist', 'modern');
   }
 
+  if (vibes.allowsDogs) {
+    keywords.push('dog friendly', 'pet friendly');
+  }
+
+  if (vibes.servesVegetarian) {
+    keywords.push('vegetarian', 'vegan');
+  }
+
+  if (vibes.brunch) {
+    keywords.push('brunch', 'breakfast');
+  }
+
   return keywords;
 }
 

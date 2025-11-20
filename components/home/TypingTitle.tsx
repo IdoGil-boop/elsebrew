@@ -96,14 +96,14 @@ export default function TypingTitle() {
   }, [displayText, isDeleting, cityIndex]);
 
   return (
-    <h1 className="text-5xl md:text-6xl font-serif font-bold text-espresso mb-4">
+    <h1 className="text-3xl sm:text-5xl md:text-6xl font-serif font-bold text-espresso mb-4 text-left sm:text-center px-2">
       Find Your Local Café in{' '}
-      <span className="inline-block min-w-[300px] text-left">
+      <span className="inline-block min-w-[200px] sm:min-w-[300px] text-left">
         {displayText}
         <motion.span
           animate={{ opacity: [1, 0] }}
           transition={{ duration: 0.8, repeat: Infinity, repeatType: 'reverse' }}
-          className="inline-block w-1 h-12 md:h-16 bg-espresso ml-1 align-middle"
+          className="inline-block w-1 h-8 sm:h-12 md:h-16 bg-espresso ml-1 align-middle"
         />
       </span>
     </h1>

@@ -41,53 +41,44 @@ const searchRequest: any = {
 };
 ```
 
-### Step 2: Fetch Additional Fields Per Place
-After getting search results, we fetch atmosphere & amenity fields for each place individually:
-```typescript
-const additionalFields = [
-  'outdoorSeating',
-  'takeout',
-  'delivery',
-  'dineIn',
-  'reservable',
-  'goodForGroups',
-  'goodForChildren',
-  'goodForWatchingSports',
-  'liveMusic',
-  'servesCoffee',
-  'servesBreakfast',
-  'servesBrunch',
-  'servesLunch',
-  'servesDinner',
-  'servesBeer',
-  'servesWine',
-  'servesVegetarianFood',
-  'allowsDogs',
-  'restroom',
-  'menuForChildren',
-  'accessibilityOptions',
-  'paymentOptions',
-  'parkingOptions',
-];
+### Step 2: Fetch Additional Fields Per Place (REST proxy)
+After getting search results, we now call Google's REST Places Details endpoint from our own API route (`/api/google/places/details`). This avoids the SDK limitation and keeps the private API key on the server.
 
-// Fetch for each place
-await Promise.all(
-  places.map(async (place: any) => {
-    try {
-      await place.fetchFields({ fields: additionalFields });
-    } catch (error) {
-      // Fields will be undefined if not available
-      console.warn(`Could not fetch additional fields for ${place.displayName}`);
-    }
-  })
-);
+```typescript
+// lib/places-search.ts (client)
+const advancedFieldsByPlaceId = await fetch('/api/google/places/details', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ placeIds }),
+})
+  .then(res => res.ok ? res.json() : { fieldsByPlaceId: {} })
+  .then(data => data.fieldsByPlaceId ?? {});
+
+const validPlaces = filteredPlaces.map(place => {
+  const advanced = advancedFieldsByPlaceId[place.id] || {};
+  return {
+    ...place,
+    outdoorSeating: advanced.outdoorSeating ?? place.outdoorSeating,
+    takeout: advanced.takeout ?? place.takeout,
+    // ...remaining fields
+  };
+});
+```
+
+```typescript
+// app/api/google/places/details/route.ts (server)
+const url = new URL(`https://places.googleapis.com/v1/places/${placeId}`);
+url.searchParams.set('fields', ADVANCED_PLACE_FIELD_MASK);
+url.searchParams.set('key', process.env.GOOGLE_MAPS_API_KEY!);
+
+const response = await fetch(url.toString(), { cache: 'no-store' });
+const data = await response.json();
 ```
 
 ## Error Handling
-The implementation includes graceful error handling:
-- If `fetchFields()` fails for a place, that place will still be included in results
-- Fields that aren't available will be `undefined` in the `PlaceBasicInfo` object
-- Warnings are logged to console for debugging
+- The API route deduplicates IDs, caps requests at 20 places, and logs (but does not throw) per-place failures
+- If Google rejects a specific place, we simply omit its advanced data and keep the result
+- Client-side callers treat missing fields as `undefined`, identical to the previous behavior
 
 ## Billing Considerations
 Some atmosphere and amenity fields may require the **Advanced Data SKU** billing plan from Google Cloud Platform. If these fields return `undefined`:
@@ -101,21 +92,18 @@ Reference: https://developers.google.com/maps/documentation/places/web-service/d
 ## Files Modified
 
 ### [lib/places-search.ts](lib/places-search.ts)
-**Changes:**
-1. Removed atmosphere/amenity fields from `searchRequest.fields` array (lines 89-103)
-2. Created `additionalFields` array with all atmosphere/amenity field names (lines 109-135)
-3. Added `fetchFields()` call after search results (lines 245-265)
-4. Added error handling and logging
+- Calls `/api/google/places/details` after `searchByText`, merges the returned fields, and falls back gracefully if the route fails
 
-**Key sections:**
-- Lines 87-107: Basic search request with only available fields
-- Lines 109-135: List of additional fields to fetch separately
-- Lines 245-265: Async fetching of additional fields per place
+### [lib/googlePlaceFields.ts](lib/googlePlaceFields.ts)
+- Central list of advanced field names shared by both client and server
+
+### [app/api/google/places/details/route.ts](app/api/google/places/details/route.ts)
+- Server-side proxy that hits the REST endpoint with `GOOGLE_MAPS_API_KEY`
 
 ### No Changes Required To:
-- [types/index.ts](types/index.ts) - Already has all atmosphere/amenity fields defined (lines 33-56)
-- [components/results/ResultsList.tsx](components/results/ResultsList.tsx) - Will automatically receive the new fields
-- [lib/scoring.ts](lib/scoring.ts) - Can now use these fields for enhanced scoring
+- [types/index.ts](types/index.ts)
+- [components/results/ResultsList.tsx](components/results/ResultsList.tsx)
+- [lib/scoring.ts](lib/scoring.ts)
 
 ## Testing
 
@@ -129,14 +117,14 @@ Reference: https://developers.google.com/maps/documentation/places/web-service/d
 5. Inspect the results to see if atmosphere fields are populated
 
 ### Expected Behavior
-- **With Advanced Data SKU enabled**: Fields will be populated with boolean values or objects
-- **Without Advanced Data SKU**: Fields will be `undefined` but search will still work
-- **API errors**: Will be logged to console but won't break the search
+- **With Advanced Data SKU enabled**: REST responses include the requested booleans/objects
+- **Without Advanced Data SKU**: Fields are `undefined`, but the search still succeeds
+- **API errors**: Logged server-side, client receives an empty payload and continues
 
 ## Performance Impact
-- **Additional API calls**: One `fetchFields()` call per place (typically 5-15 places)
-- **Latency increase**: Approximately 100-500ms additional delay per search
-- **Cost increase**: If Advanced Data SKU is enabled, each fetchFields() call may incur additional charges
+- **Additional API calls**: Up to 20 REST Places Details requests per search (server-side)
+- **Latency increase**: Similar to the previous attempt, but now reliable
+- **Cost increase**: Each successful REST call with Advanced Data incurs the expected SKU charge
 
 ## Future Enhancements
 1. **Conditional fetching**: Only fetch fields if Advanced Data SKU is detected

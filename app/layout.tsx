@@ -3,6 +3,7 @@ import "./globals.css";
 import Header from "@/components/shared/Header";
 import Footer from "@/components/shared/Footer";
 import AnalyticsProvider from "@/components/shared/AnalyticsProvider";
+import BodyOverflowFixer from "@/components/shared/BodyOverflowFixer";
 
 export const metadata: Metadata = {
   title: "Elsebrew - Find your café's twin, anywhere",
@@ -23,6 +24,7 @@ export default function RootLayout({
       </head>
       <body>
         <AnalyticsProvider />
+        <BodyOverflowFixer />
         <div className="min-h-screen flex flex-col">
           <Header />
           <main className="flex-1">

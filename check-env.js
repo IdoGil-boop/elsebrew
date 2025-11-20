@@ -25,7 +25,8 @@ const envContent = fs.readFileSync(envPath, 'utf-8');
 const lines = envContent.split('\n');
 
 const requiredVars = [
-  { key: 'NEXT_PUBLIC_GOOGLE_MAPS_API_KEY', name: 'Google Maps API Key' },
+  { key: 'NEXT_PUBLIC_GOOGLE_MAPS_API_KEY', name: 'Google Maps API Key (client)' },
+  { key: 'GOOGLE_MAPS_API_KEY', name: 'Google Maps API Key (server)' },
   { key: 'NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID', name: 'Google OAuth Client ID' },
   { key: 'OPENAI_API_KEY', name: 'OpenAI API Key' },
 ];

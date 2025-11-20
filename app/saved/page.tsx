@@ -212,108 +212,112 @@ export default function SavedPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="flex items-center gap-4 mb-4">
-          <button
-            onClick={handleBack}
-            className="flex items-center gap-2 text-sm text-gray-600 hover:text-espresso transition-colors group"
-          >
-            <div className="relative w-4 h-4 overflow-hidden">
-              <svg
-                className="w-4 h-4 absolute transition-all duration-300 group-hover:-translate-x-full group-hover:opacity-0"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-              <svg
-                className="w-4 h-4 absolute translate-x-full opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
+    <div className="h-screen flex flex-col">
+      {/* Sticky header */}
+      <div className="bg-white border-b border-gray-100 px-3 sm:px-6 py-3 sm:py-4 flex-shrink-0 sticky top-14 sm:top-16 z-40">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center gap-2 sm:gap-4 mb-2">
+            <button
+              onClick={handleBack}
+              className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-600 hover:text-espresso transition-colors group flex-shrink-0"
+            >
+              <div className="relative w-3 h-3 sm:w-4 sm:h-4 overflow-hidden">
+                <svg
+                  className="w-3 h-3 sm:w-4 sm:h-4 absolute transition-all duration-300 group-hover:-translate-x-full group-hover:opacity-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                <svg
+                  className="w-3 h-3 sm:w-4 sm:h-4 absolute translate-x-full opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+              </div>
+              {(() => {
+                const navState = storage.getNavigationState();
+                return navState?.previousRoute === '/results' ? 'Back to results' : 'Back to search';
+              })()}
+            </button>
+            <div className="h-4 sm:h-6 w-px bg-gray-200"></div>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl sm:text-4xl font-serif font-bold truncate">Saved cafés</h1>
             </div>
-            {(() => {
-              const navState = storage.getNavigationState();
-              return navState?.previousRoute === '/results' ? 'Back to results' : 'Back to search';
-            })()}
-          </button>
-          <div className="h-6 w-px bg-gray-200"></div>
-          <div>
-            <h1 className="text-4xl font-serif font-bold">Saved cafés</h1>
           </div>
+          <p className="text-xs sm:text-sm text-gray-600">
+            {savedCafes.length} café{savedCafes.length !== 1 ? 's' : ''} saved
+          </p>
         </div>
-        <p className="text-gray-600 mb-8">
-          {savedCafes.length} café{savedCafes.length !== 1 ? 's' : ''} saved
-        </p>
-      </motion.div>
+      </div>
 
-      <div className="space-y-4">
-        {savedCafes.map((cafe, index) => (
-          <motion.div
-            key={cafe.placeId}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: index * 0.05 }}
-            className="card p-6"
-          >
-            <div className="flex gap-6">
-              {/* Photo */}
-              {cafe.photoUrl && (
-                <div className="w-32 h-32 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100">
-                  <img
-                    src={cafe.photoUrl}
-                    alt={cafe.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              )}
+      {/* Saved places list - scrollable */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
+          <div className="space-y-3 sm:space-y-4">
+            {savedCafes.map((cafe, index) => (
+              <motion.div
+                key={cafe.placeId}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: index * 0.05 }}
+                className="card p-4 sm:p-6"
+              >
+                <div className="flex gap-4 sm:gap-6">
+                  {/* Photo */}
+                  {cafe.photoUrl && (
+                    <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100">
+                      <img
+                        src={cafe.photoUrl}
+                        alt={cafe.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
 
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <h3 className="text-xl font-semibold mb-1">{cafe.name}</h3>
-                    {cafe.rating && (
-                      <div className="flex items-center space-x-1 text-sm">
-                        <span className="text-yellow-500">★</span>
-                        <span className="font-medium">{cafe.rating.toFixed(1)}</span>
-                      </div>
-                    )}
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-lg sm:text-xl font-semibold mb-1 truncate">{cafe.name}</h3>
+                      {cafe.rating && (
+                        <div className="flex items-center space-x-1 text-sm">
+                          <span className="text-yellow-500">★</span>
+                          <span className="font-medium">{cafe.rating.toFixed(1)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                    <p className="text-xs sm:text-sm text-gray-500 mb-4">
+                      Saved on {new Date(cafe.savedAt).toLocaleDateString()}
+                    </p>
+
+                    {/* Actions */}
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                      <button
+                        onClick={() => handleOpenInMaps(cafe.placeId)}
+                        className="btn-primary text-sm py-2 sm:py-3"
+                      >
+                        Open in Maps
+                      </button>
+                      <button
+                        onClick={() => handleRemove(cafe.placeId)}
+                        className="btn-secondary text-sm py-2 sm:py-3"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 </div>
-
-                <p className="text-sm text-gray-500 mb-4">
-                  Saved on {new Date(cafe.savedAt).toLocaleDateString()}
-                </p>
-
-                {/* Actions */}
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => handleOpenInMaps(cafe.placeId)}
-                    className="btn-primary"
-                  >
-                    Open in Maps
-                  </button>
-                  <button
-                    onClick={() => handleRemove(cafe.placeId)}
-                    className="btn-secondary"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        ))}
+              </motion.div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

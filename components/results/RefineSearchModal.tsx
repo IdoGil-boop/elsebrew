@@ -74,6 +74,9 @@ export default function RefineSearchModal({
     { key: 'nightOwl', label: 'Night-owl' },
     { key: 'cozy', label: 'Cozy' },
     { key: 'minimalist', label: 'Minimalist' },
+    { key: 'allowsDogs', label: 'Allows dogs' },
+    { key: 'servesVegetarian', label: 'Serves vegetarian' },
+    { key: 'brunch', label: 'Brunch' },
   ];
 
   return (

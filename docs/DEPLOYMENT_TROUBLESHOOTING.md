@@ -11,31 +11,34 @@ Failed to get source place details
 
 ### Root Causes & Solutions
 
-#### 1. Google Maps API Key Not Configured in AWS Amplify
+#### 1. Google Maps API Keys Not Configured in AWS Amplify
 
 **Check:**
 - Go to AWS Amplify Console → Your App → Environment Variables
-- Verify `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is set
+- Verify both `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (client) **and** `GOOGLE_MAPS_API_KEY` (server) are set
 
 **Fix:**
 1. Log into AWS Amplify Console
 2. Navigate to your app
 3. Go to **Environment variables** (in left sidebar)
-4. Add `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` with your API key value
-5. **Redeploy** the app (variables only apply to new builds)
+4. Add/confirm `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (client-side, HTTP-referrer restricted)
+5. Add/confirm `GOOGLE_MAPS_API_KEY` (server-side, for Places API calls)
+6. **Redeploy** the app (variables only apply to new builds)
+
+**📘 See:** [GOOGLE_API_KEYS_SETUP.md](./GOOGLE_API_KEYS_SETUP.md) for detailed key configuration
 
 #### 2. Google Maps API Key Restrictions
 
-**Problem:** Your API key might be restricted to localhost only
+**Problem:** Your client-side API key might be restricted to localhost only
 
 **Check:**
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Navigate to **APIs & Services** → **Credentials**
-3. Click on your API key
+3. Click on your **client-side API key** (the one for `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`)
 4. Check **Application restrictions** section
 
 **Fix:**
-Update the **HTTP referrers** to include your specific AWS Amplify domain:
+Update the **HTTP referrers** for your **client-side key** to include your AWS Amplify domain:
 
 **Secure Option (Recommended):**
 ```
@@ -65,10 +68,8 @@ https://your-custom-domain.com/*
 **Check:** Ensure these APIs are enabled in Google Cloud Console:
 1. Go to **APIs & Services** → **Library**
 2. Search and enable:
-   - ✅ Maps JavaScript API
-   - ✅ Places API
-   - ✅ Geocoding API
-   - ✅ Maps Embed API
+   - ✅ Maps JavaScript API (for client-side key)
+   - ✅ Places API (New) (for server-side key)
 
 #### 4. API Quota Exceeded
 
@@ -100,6 +101,8 @@ After applying fixes, test:
 # In browser console on your Amplify URL:
 console.log(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.substring(0, 10));
 # Should show first 10 chars, not undefined
+
+# Server key can't be read from browser—confirm via Amplify env settings
 ```
 
 2. **Check API key restrictions:**
@@ -124,7 +127,7 @@ Then open browser console and look for:
 
 ### Quick Checklist
 
-- [ ] Environment variable `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` set in AWS Amplify
+- [ ] Environment variables `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` and `GOOGLE_MAPS_API_KEY` set in AWS Amplify
 - [ ] App redeployed after setting environment variables
 - [ ] API key includes AWS Amplify domain in HTTP referrer restrictions
 - [ ] All required Google APIs enabled (Maps JavaScript, Places, Geocoding, Embed)

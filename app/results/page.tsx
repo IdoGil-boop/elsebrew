@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { CafeMatch, PlaceBasicInfo, VibeToggles } from '@/types';
+import { CafeMatch, PlaceBasicInfo, VibeToggles, normalizeVibes } from '@/types';
 import { loadGoogleMaps } from '@/lib/maps-loader';
 import { searchCafes, SearchCafesResult } from '@/lib/places-search';
 import { analytics } from '@/lib/analytics';
@@ -33,6 +33,7 @@ function ResultsContent() {
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
   const [showToast, setShowToast] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list'); // Mobile toggle
 
   // Pagination state
   const [currentSearchId, setCurrentSearchId] = useState<string>('');
@@ -144,7 +145,7 @@ function ResultsContent() {
           return;
         }
 
-        const vibes: VibeToggles = JSON.parse(vibesParam);
+        const vibes: VibeToggles = normalizeVibes(JSON.parse(vibesParam));
 
         // Parse source place IDs early (needed for search ID generation)
         let sourcePlaceIds: string[] = [];
@@ -407,7 +408,9 @@ function ResultsContent() {
           destTypes, // Pass destination types to determine if it's an area or point
           destResult.place_id, // Pass destination place ID for boundary verification
           sourcePlaces, // Pass all origin places for type overlap scoring
-          placeIdsToFilter // Pass places to filter out
+          placeIdsToFilter, // Pass places to filter out
+          undefined, // pageToken
+          freeText || '' // Pass free text for field relevance detection
         );
 
         const matches = searchResult.results; // Top 5 for display
@@ -801,17 +804,18 @@ function ResultsContent() {
   return (
     <>
       <div className="min-h-screen flex flex-col">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-100 px-6 py-4 flex-shrink-0">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-4">
+        {/* Header - Sticky */}
+        <div className="bg-white border-b border-gray-100 px-3 sm:px-6 py-3 sm:py-4 flex-shrink-0 sticky top-14 sm:top-16 z-40">
+          <div className="max-w-7xl mx-auto">
+            {/* Top row - Back button and title */}
+            <div className="flex items-center gap-2 sm:gap-4 mb-3 sm:mb-0">
               <button
                 onClick={() => router.push('/')}
-                className="flex items-center gap-2 text-sm text-gray-600 hover:text-espresso transition-colors duration-800 group"
+                className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-600 hover:text-espresso transition-colors duration-800 group flex-shrink-0"
               >
-                <div className="relative w-4 h-4 overflow-hidden">
+                <div className="relative w-3 h-3 sm:w-4 sm:h-4 overflow-hidden">
                   <svg
-                    className="w-4 h-4 absolute transition-all duration-300 group-hover:-translate-x-full group-hover:opacity-0"
+                    className="w-3 h-3 sm:w-4 sm:h-4 absolute transition-all duration-300 group-hover:-translate-x-full group-hover:opacity-0"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -819,7 +823,7 @@ function ResultsContent() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                   </svg>
                   <svg
-                    className="w-4 h-4 absolute translate-x-full opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100"
+                    className="w-3 h-3 sm:w-4 sm:h-4 absolute translate-x-full opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -827,14 +831,14 @@ function ResultsContent() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                   </svg>
                 </div>
-                New search
+                <span className="hidden sm:inline">New search</span>
               </button>
-              <div className="h-6 w-px bg-gray-200"></div>
-              <div>
-                <h1 className="text-xl font-semibold">
+              <div className="h-4 sm:h-6 w-px bg-gray-200"></div>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-base sm:text-xl font-semibold truncate">
                   {results.length} café{results.length !== 1 ? 's' : ''} found
                 </h1>
-                <p className="text-sm text-gray-600">
+                <p className="text-xs sm:text-sm text-gray-600 truncate">
                   {(() => {
                     const names = searchParams.get('sourceNames');
                     const sourceName = names ? JSON.parse(names).join(', ') : searchParams.get('sourceName');
@@ -843,33 +847,60 @@ function ResultsContent() {
                 </p>
               </div>
             </div>
-            <div className="flex gap-2">
+
+            {/* Bottom row - Action buttons */}
+            <div className="flex flex-wrap gap-2 mt-3">
               <button
                 onClick={() => {
                   analytics.refineSearchOpen();
                   setIsRefineModalOpen(true);
                 }}
-                className="btn-secondary text-sm"
+                className="btn-secondary text-xs sm:text-sm px-3 sm:px-6 py-2 sm:py-3 flex-1 sm:flex-none whitespace-nowrap"
               >
-                I missed your vibe?
+                <span className="hidden sm:inline">I missed your vibe?</span>
+                <span className="sm:hidden">Missed vibe?</span>
               </button>
               <button
                 onClick={handleSaveAll}
                 disabled={isSavingAll}
-                className="btn-secondary text-sm"
+                className="btn-secondary text-xs sm:text-sm px-3 sm:px-6 py-2 sm:py-3 flex-1 sm:flex-none"
               >
                 {isSavingAll ? 'Saving...' : 'Save All'}
               </button>
+
+              {/* Mobile view toggle */}
+              <div className="lg:hidden flex gap-1 border border-gray-200 rounded-2xl p-1 flex-1 sm:flex-none">
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`flex-1 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${
+                    viewMode === 'list'
+                      ? 'bg-espresso text-white'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  List
+                </button>
+                <button
+                  onClick={() => setViewMode('map')}
+                  className={`flex-1 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${
+                    viewMode === 'map'
+                      ? 'bg-espresso text-white'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  Map
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Results grid */}
         <div className="flex-1">
-          <div className="max-w-7xl mx-auto px-8 py-8">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* List */}
-              <div className="h-[calc(100vh-90px)] overflow-visible">
+          <div className="max-w-7xl mx-auto px-0 sm:px-8 py-0 sm:py-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 lg:gap-8">
+              {/* List - Show on mobile when viewMode is 'list', always show on desktop */}
+              <div className={`${viewMode === 'list' ? 'block' : 'hidden'} lg:block h-[calc(100vh-180px)] sm:h-[calc(100vh-200px)] overflow-visible`}>
                 <ResultsList
                   results={results}
                   onSelectResult={handleSelectResult}
@@ -879,8 +910,8 @@ function ResultsContent() {
                 />
               </div>
 
-              {/* Map */}
-              <div className="hidden lg:block h-[calc(100vh-180px)]">
+              {/* Map - Show on mobile when viewMode is 'map', always show on desktop */}
+              <div className={`${viewMode === 'map' ? 'block' : 'hidden'} lg:block h-[calc(100vh-180px)] sm:h-[calc(100vh-200px)]`}>
                 <ResultsMap
                   results={results}
                   center={mapCenter}
@@ -903,7 +934,7 @@ function ResultsContent() {
       <RefineSearchModal
         isOpen={isRefineModalOpen}
         onClose={() => setIsRefineModalOpen(false)}
-        currentVibes={JSON.parse(searchParams.get('vibes') || '{}')}
+        currentVibes={normalizeVibes(JSON.parse(searchParams.get('vibes') || '{}'))}
         currentFreeText={searchParams.get('freeText') || ''}
         sourcePlaceIds={(() => {
           const ids = searchParams.get('sourcePlaceIds');

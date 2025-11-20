@@ -40,6 +40,11 @@ export default function ResultsMap({
             stylers: [{ visibility: 'off' }],
           },
         ],
+        gestureHandling: 'greedy', // Better mobile touch handling
+        zoomControl: true,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
       });
 
       mapInstanceRef.current = map;
@@ -66,6 +71,7 @@ export default function ResultsMap({
           },
         });
 
+        // When marker is clicked, open the details drawer (same as clicking a card)
         marker.addListener('click', () => {
           analytics.resultClick({ rank: index + 1, place_id: results[index].place.id });
           onMarkerClick(index);
@@ -118,8 +124,8 @@ export default function ResultsMap({
   return (
     <div
       ref={mapRef}
-      className="w-full h-full rounded-2xl overflow-hidden shadow-lg"
-      style={{ minHeight: '500px' }}
+      className="w-full h-full rounded-none sm:rounded-2xl overflow-hidden shadow-lg"
+      style={{ minHeight: '400px' }}
     />
   );
 }

@@ -103,14 +103,15 @@ Key Features Implemented:
 ════════════════════════════════════════════════════════════════
 
 API Keys Required:
-1. Google Maps API Key          (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY)
-2. Google OAuth Client ID       (NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID)
-3. OpenAI API Key              (OPENAI_API_KEY)
+1. Google Maps API Key (client) (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY)
+2. Google Maps API Key (server) (GOOGLE_MAPS_API_KEY)
+3. Google OAuth Client ID       (NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID)
+4. OpenAI API Key              (OPENAI_API_KEY)
 
 Optional:
-4. Google Analytics 4          (NEXT_PUBLIC_GA4_MEASUREMENT_ID)
-5. Buy Me A Coffee URL         (NEXT_PUBLIC_BUYMEACOFFEE_URL)
-6. Mailchimp Form Action       (MAILCHIMP_FORM_ACTION)
+5. Google Analytics 4          (NEXT_PUBLIC_GA4_MEASUREMENT_ID)
+6. Buy Me A Coffee URL         (NEXT_PUBLIC_BUYMEACOFFEE_URL)
+7. Mailchimp Form Action       (MAILCHIMP_FORM_ACTION)
 
 ════════════════════════════════════════════════════════════════
 

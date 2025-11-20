@@ -11,15 +11,19 @@ Use this checklist to get Elsebrew from code to production.
 ## ✅ Google Cloud Platform Setup
 
 ### Google Maps API
+
+**See [GOOGLE_API_KEYS_SETUP.md](./GOOGLE_API_KEYS_SETUP.md) for detailed instructions**
+
 - [ ] Created Google Cloud project
 - [ ] Enabled Maps JavaScript API
-- [ ] Enabled Places API
-- [ ] Enabled Geocoding API
-- [ ] Enabled Maps Embed API
-- [ ] Created API key
-- [ ] Restricted API key to 4 APIs above
+- [ ] Enabled Places API (New)
+- [ ] Created client-side API key (for Maps JS API in browser)
+- [ ] Restricted client key: HTTP referrers + Maps JavaScript API only
 - [ ] Added `http://localhost:3000/*` to allowed referrers
-- [ ] Copied API key to `.env.local` → `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
+- [ ] Copied client key to `.env.local` → `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
+- [ ] Created server-side API key (for Places API from Next.js)
+- [ ] Restricted server key: IP addresses (or None) + Places API (New) only
+- [ ] Copied server key to `.env.local` → `GOOGLE_MAPS_API_KEY`
 
 ### Google OAuth
 - [ ] Created OAuth 2.0 Client ID (Web application)
@@ -93,6 +97,7 @@ Use this checklist to get Elsebrew from code to production.
 - [ ] Connected GitHub repository (or pushed code)
 - [ ] Added environment variables in hosting dashboard:
   - [ ] `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
+  - [ ] `GOOGLE_MAPS_API_KEY`
   - [ ] `NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID`
   - [ ] `OPENAI_API_KEY`
   - [ ] `NEXT_PUBLIC_GA4_MEASUREMENT_ID` (if using)

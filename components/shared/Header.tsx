@@ -95,18 +95,18 @@ export default function Header() {
 
   return (
     <header className="bg-white border-b border-gray-100 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
+        <div className="flex items-center justify-between h-14 sm:h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2 group">
-            <div className="text-2xl transition-transform group-hover:scale-105">☕</div>
-            <span className="text-xl font-serif font-semibold text-espresso">
+          <Link href="/" className="flex items-center space-x-1 sm:space-x-2 group">
+            <div className="text-xl sm:text-2xl transition-transform group-hover:scale-105">☕</div>
+            <span className="text-lg sm:text-xl font-serif font-semibold text-espresso">
               Elsebrew
             </span>
           </Link>
 
           {/* Navigation */}
-          <nav className="flex items-center space-x-4">
+          <nav className="flex items-center space-x-2 sm:space-x-4">
             {user ? (
               <div className="relative" ref={dropdownRef}>
                 <button
@@ -192,10 +192,11 @@ export default function Header() {
             {/* Buy Me A Coffee - Right side */}
             <button
               onClick={handleBuyMeCoffee}
-              className="text-xs px-5 py-2 bg-espresso/5 hover:bg-espresso/10 text-espresso rounded-lg transition-colors inline-flex items-center space-x-1.5 border-brown border border-transperant hover:border-espresso"
+              className="text-xs px-3 sm:px-5 py-2 bg-espresso/5 hover:bg-espresso/10 text-espresso rounded-lg transition-colors inline-flex items-center space-x-1.5 border-brown border border-transperant hover:border-espresso"
             >
               <span>☕</span>
-              <span>Buy Me A Coffee</span>
+              <span className="hidden sm:inline">Buy Me A Coffee</span>
+              <span className="sm:hidden">Coffee</span>
             </button>
           </nav>
         </div>
