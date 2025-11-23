@@ -8,7 +8,7 @@ export default function PrivacyPage() {
 
         <h2 className="text-2xl font-serif font-semibold mt-8 mb-4">Introduction</h2>
         <p className="text-gray-700 mb-4">
-          Elsebrew ("I," "my," or "the service") is committed to protecting your privacy. This Privacy
+          Elsebrew (&quot;I,&quot; &quot;my,&quot; or &quot;the service&quot;) is committed to protecting your privacy. This Privacy
           Policy explains how I collect, use, and share information when you use this website.
         </p>
 
@@ -69,7 +69,7 @@ export default function PrivacyPage() {
 
         <h2 className="text-2xl font-serif font-semibold mt-8 mb-4">Changes to this policy</h2>
         <p className="text-gray-700 mb-4">
-          I may update this Privacy Policy from time to time. I'll notify you of significant
+          I may update this Privacy Policy from time to time. I&apos;ll notify you of significant
           changes by posting a notice on the website.
         </p>
 

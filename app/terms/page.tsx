@@ -22,7 +22,7 @@ export default function TermsPage() {
         <h2 className="text-2xl font-serif font-semibold mt-8 mb-4">3. Validation/Beta Status</h2>
         <p className="text-gray-700 mb-4">
           Elsebrew is currently a validation project. While the search
-          results are real and powered by Google Maps data, the service is provided "as is"
+          results are real and powered by Google Maps data, the service is provided &quot;as is&quot;
           without guarantees of accuracy, completeness, or continued availability.
         </p>
 
@@ -40,7 +40,7 @@ export default function TermsPage() {
         <h2 className="text-2xl font-serif font-semibold mt-8 mb-4">5. Google Maps Content</h2>
         <p className="text-gray-700 mb-4">
           All café data, photos, and maps are provided by Google Maps Platform and are subject
-          to Google's Terms of Service. This service displays required Google attributions and does not claim
+          to Google&apos;s Terms of Service. This service displays required Google attributions and does not claim
           ownership of this content.
         </p>
 
@@ -60,7 +60,7 @@ export default function TermsPage() {
 
         <h2 className="text-2xl font-serif font-semibold mt-8 mb-4">8. Limitation of Liability</h2>
         <p className="text-gray-700 mb-4">
-          Elsebrew is provided "as is" without warranties of any kind. The service provider is not liable for:
+          Elsebrew is provided &quot;as is&quot; without warranties of any kind. The service provider is not liable for:
         </p>
         <ul className="list-disc pl-6 text-gray-700 mb-4">
           <li>Inaccurate café recommendations</li>

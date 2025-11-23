@@ -54,7 +54,7 @@ export default function Home() {
             <div className="text-4xl mb-3">🔍</div>
             <h3 className="font-semibold mb-2">Pick your favorite</h3>
             <p className="text-sm text-gray-600">
-              Tell me about a café you love and where you're headed
+              Tell me about a café you love and where you&apos;re headed
             </p>
           </div>
           <div className="text-center">
