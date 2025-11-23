@@ -113,15 +113,15 @@ export default function DebugAnalyticsPage() {
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
           <h2 className="text-xl font-semibold mb-4">Instructions</h2>
           <ol className="list-decimal list-inside space-y-2">
-            <li>Open your browser's DevTools (F12)</li>
+            <li>Open your browser&apos;s DevTools (F12)</li>
             <li>Go to the <strong>Network</strong> tab</li>
             <li>Clear all requests (trash icon)</li>
-            <li>Click "Send Test Event" above</li>
+            <li>Click &quot;Send Test Event&quot; above</li>
             <li>Look for requests to:
               <ul className="list-disc list-inside ml-6 mt-2">
                 <li><code>google-analytics.com/g/collect</code></li>
                 <li><code>google-analytics.com/collect</code></li>
-                <li>Any request with "analytics" in the name</li>
+                <li>Any request with &quot;analytics&quot; in the name</li>
               </ul>
             </li>
             <li>Check the Console tab for debug logs</li>
