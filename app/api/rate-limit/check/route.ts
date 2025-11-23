@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/auth';
 import { getClientIp } from '@/lib/ip-utils';
-import { checkAndIncrementRateLimit } from '@/lib/dynamodb';
+import { checkAndIncrementRateLimit, getRateLimitConfig } from '@/lib/dynamodb';
 import { logger } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
+    // Get rate limit configuration
+    const { maxSearches, windowHours } = getRateLimitConfig();
+    
     // Get user ID and IP address
     const user = await getUserFromRequest(request);
     const ip = getClientIp(request);
@@ -41,7 +44,8 @@ export async function POST(request: NextRequest) {
           remaining: rateLimit.remaining,
           resetAt: rateLimit.resetAt,
           currentCount: rateLimit.currentCount,
-          limit: 10, // This is just for display, actual limit is in RATE_LIMIT_MAX_SEARCHES
+          limit: maxSearches,
+          windowHours: windowHours,
           blockedBy: rateLimit.blockedBy,
           isAuthenticated: !!user,
         },
@@ -54,20 +58,23 @@ export async function POST(request: NextRequest) {
       remaining: rateLimit.remaining,
       resetAt: rateLimit.resetAt,
       currentCount: rateLimit.currentCount,
-      limit: 10, // This is just for display, actual limit is in RATE_LIMIT_MAX_SEARCHES
+      limit: maxSearches,
+      windowHours: windowHours,
       isAuthenticated: !!user,
     });
   } catch (error) {
     logger.error('[Rate Limit API] Error:', error);
     // On error, fail closed (block) to prevent abuse
     // This is safer than failing open
+    const { maxSearches, windowHours } = getRateLimitConfig();
     return NextResponse.json(
       {
         allowed: false,
         remaining: 0,
-        resetAt: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
+        resetAt: new Date(Date.now() + windowHours * 60 * 60 * 1000).toISOString(),
         currentCount: 999, // Indicate error state
-        limit: 10,
+        limit: maxSearches,
+        windowHours: windowHours,
         isAuthenticated: false,
         error: 'Rate limit check failed',
       },

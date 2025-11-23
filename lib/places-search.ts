@@ -148,7 +148,7 @@ export const searchCafes = async (
   destinationTypes: string[] = [], // Destination types to determine if it's an area or point
   destinationPlaceId?: string, // Place ID for reverse geocoding verification
   originPlaces: PlaceBasicInfo[] = [], // All origin places for type overlap scoring
-  placeIdsToFilter: string[] = [], // Place IDs to filter out (seen but unsaved)
+  placeIdsToPenalize: string[] = [], // Place IDs to penalize (seen but unsaved) - will be scored lower, not filtered out
   pageToken?: string, // Token for fetching next page of results
   freeText: string = '' // Free text query for field relevance detection
 ): Promise<SearchCafesResult> => {
@@ -359,11 +359,14 @@ export const searchCafes = async (
       const mapsUrl = lat && lng
         ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}&query_place_id=${place.id}`
         : 'No coordinates';
+      const hasPhotos = place.photos && place.photos.length > 0;
       console.log(`  ${index + 1}. ${place.displayName} (${place.rating}★)`, {
         placeId: place.id,
         coordinates: lat && lng ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : 'N/A',
         mapsLink: mapsUrl,
         address: place.formattedAddress,
+        hasPhotos,
+        photoCount: place.photos?.length || 0,
       });
     });
 
@@ -372,12 +375,6 @@ export const searchCafes = async (
       .filter((place: any) => {
         // Basic validation
         if (!place.id || !place.rating) return false;
-
-        // Filter out places user has seen but not saved
-        if (placeIdsToFilter.includes(place.id)) {
-          console.log(`[Places Search] Filtering out seen place: ${place.displayName}`);
-          return false;
-        }
         return true;
       });
 
@@ -399,6 +396,25 @@ export const searchCafes = async (
 
     const validPlaces: PlaceBasicInfo[] = filteredPlaces.map((place: any) => {
       const advancedFields = advancedFieldsByPlaceId[place.id] || {};
+      // Prefer photos from searchByText (PlacePhoto objects with getURI method)
+      let photos = place.photos ? place.photos.slice(0, 4) : undefined;
+      let photoUrl: string | undefined = undefined;
+      
+      // Log photo status for debugging
+      if (!photos || photos.length === 0) {
+        console.log(`[Places Search] No photos from searchByText for ${place.displayName}`);
+        // If no photos from searchByText, use photo URLs from details API
+        const photoUrls = (advancedFields as any).photoUrls;
+        if (photoUrls && Array.isArray(photoUrls) && photoUrls.length > 0) {
+          // Use the first photo URL as photoUrl (for backward compatibility)
+          photoUrl = photoUrls[0];
+          console.log(`[Places Search] Using photo URL from details API for ${place.displayName} (${photoUrls.length} photos available)`);
+        } else {
+          console.log(`[Places Search] No photos available from details API for ${place.displayName}`);
+        }
+      } else {
+        console.log(`[Places Search] Using ${photos.length} photos from searchByText for ${place.displayName}`);
+      }
 
       return {
         id: place.id,
@@ -411,7 +427,8 @@ export const searchCafes = async (
         userRatingCount: place.userRatingCount,
         priceLevel: place.priceLevel,
         regularOpeningHours: place.regularOpeningHours,
-        photos: place.photos ? place.photos.slice(0, 4) : undefined, // Limit to 4 photos to control costs
+        photos, // Use photos from searchByText (PlacePhoto objects) if available
+        photoUrl, // Fallback to photo URL from details API if no PlacePhoto objects
         editorialSummary: place.editorialSummary?.text || place.editorialSummary?.overview,
         // Atmosphere & Amenities
         outdoorSeating: advancedFields.outdoorSeating ?? place.outdoorSeating,
@@ -455,18 +472,27 @@ export const searchCafes = async (
       const geocoder = new google.maps.Geocoder();
       const verificationPromises = validPlaces.map(async (place: PlaceBasicInfo) => {
         try {
-          const result = await geocoder.geocode({
-            location: place.location
+          const result = await new Promise<google.maps.GeocoderResult[]>((resolve, reject) => {
+            geocoder.geocode(
+              { location: place.location },
+              (results: google.maps.GeocoderResult[] | null, status: google.maps.GeocoderStatus) => {
+                if (status === google.maps.GeocoderStatus.OK && results) {
+                  resolve(results);
+                } else {
+                  reject(new Error(`Geocoding failed: ${status}`));
+                }
+              }
+            );
           });
 
-          if (result.results && result.results.length > 0) {
+          if (result && result.length > 0) {
             // Check if the destination place ID appears in any of the geocoding results
             // This means the cafe's location is within that area
-            const placeIds = result.results.map((r: any) => r.place_id);
+            const placeIds = result.map((r: any) => r.place_id);
             const isWithinDestination = placeIds.includes(destinationPlaceId);
 
             console.log(`  ${place.displayName}: ${isWithinDestination ? '✓ inside' : '✗ outside'}`, {
-              address: result.results[0].formatted_address,
+              address: result[0].formatted_address,
               placeIds: placeIds.slice(0, 3), // Log first 3 for brevity
             });
 
@@ -494,7 +520,7 @@ export const searchCafes = async (
 
     // Score and sort ALL results (don't slice yet)
     // Create a set of previously seen place IDs for quick lookup
-    const seenPlaceIds = new Set(placeIdsToFilter);
+    const seenPlaceIds = new Set(placeIdsToPenalize);
 
     const allScoredResults: CafeMatch[] = verifiedPlaces
       .map((place: PlaceBasicInfo) => {

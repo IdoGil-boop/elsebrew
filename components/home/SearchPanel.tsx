@@ -168,7 +168,9 @@ export default function SearchPanel() {
         
         // Build message - only suggest sign-in if not already authenticated
         const isAuthenticated = rateLimitData.isAuthenticated !== false;
-        let message = `You've reached your search limit of ${rateLimitData.limit} searches per 12 hours. Your limit will refresh in ${timeUntilReset} (at ${resetTime}).`;
+        const windowHours = rateLimitData.windowHours || 12;
+        const hoursText = windowHours === 1 ? 'hour' : 'hours';
+        let message = `You've reached your search limit of ${rateLimitData.limit} searches per ${windowHours} ${hoursText}. Your limit will refresh in ${timeUntilReset} (at ${resetTime}).`;
 
         
         setToastMessage(message);

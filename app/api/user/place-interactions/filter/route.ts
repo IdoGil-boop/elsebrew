@@ -42,11 +42,11 @@ export async function GET(request: NextRequest) {
       originPlaceIds: JSON.parse(originPlaceIdsParam),
     };
 
-    const placeIdsToFilter = await getSeenButUnsavedPlaces(userId, searchContext);
+    const placeIdsToPenalize = await getSeenButUnsavedPlaces(userId, searchContext);
 
-    logger.debug(`[Filter API] Returning ${placeIdsToFilter.length} seen places for ${destination}`);
+    logger.debug(`[Filter API] Returning ${placeIdsToPenalize.length} seen places for ${destination}`);
 
-    return NextResponse.json({ placeIdsToFilter });
+    return NextResponse.json({ placeIdsToPenalize });
   } catch (error) {
     logger.error('[Filter API] Error fetching places to filter:', error);
     return NextResponse.json(

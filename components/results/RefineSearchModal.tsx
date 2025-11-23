@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { VibeToggles } from '@/types';
 import { useRouter } from 'next/navigation';
 import { analytics } from '@/lib/analytics';
+import { getAuthToken } from '@/lib/storage';
+import Toast from '@/components/shared/Toast';
 
 interface RefineSearchModalProps {
   isOpen: boolean;
@@ -28,6 +30,10 @@ export default function RefineSearchModal({
   const router = useRouter();
   const [vibes, setVibes] = useState<VibeToggles>(currentVibes);
   const [freeText, setFreeText] = useState(currentFreeText);
+  const [isCheckingRateLimit, setIsCheckingRateLimit] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
+  const [showToast, setShowToast] = useState(false);
 
   useEffect(() => {
     setVibes(currentVibes);
@@ -38,8 +44,69 @@ export default function RefineSearchModal({
     setVibes((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleApply = () => {
+  const handleApply = async () => {
     try {
+      setIsCheckingRateLimit(true);
+
+      // Check rate limit before navigating
+      const authToken = getAuthToken();
+      const rateLimitHeaders: HeadersInit = {};
+      if (authToken) {
+        rateLimitHeaders['Authorization'] = `Bearer ${authToken}`;
+      }
+
+      let rateLimitData;
+      try {
+        const rateLimitResponse = await fetch('/api/rate-limit/check', {
+          method: 'POST',
+          headers: rateLimitHeaders,
+        });
+
+        // Parse JSON even if status is not OK (429 still contains rate limit data)
+        rateLimitData = await rateLimitResponse.json();
+
+        if (!rateLimitResponse.ok) {
+          // If response is not OK, rateLimitData.allowed should be false, but ensure it is
+          if (rateLimitData.allowed !== false) {
+            rateLimitData.allowed = false;
+          }
+        }
+      } catch (error) {
+        console.error('[RefineSearchModal] Rate limit check failed:', error);
+        // On error, allow the search (fail open for better UX)
+        rateLimitData = { allowed: true };
+      }
+
+      // If rate limit is hit, show message and don't navigate
+      if (!rateLimitData || rateLimitData.allowed === false || !rateLimitData.allowed) {
+        // Format reset time nicely
+        const resetAt = rateLimitData?.resetAt ? new Date(rateLimitData.resetAt) : new Date(Date.now() + 12 * 60 * 60 * 1000);
+        const now = new Date();
+        const hoursUntilReset = Math.ceil((resetAt.getTime() - now.getTime()) / (1000 * 60 * 60));
+        const minutesUntilReset = Math.ceil((resetAt.getTime() - now.getTime()) / (1000 * 60));
+        
+        let timeUntilReset: string;
+        if (hoursUntilReset >= 1) {
+          timeUntilReset = hoursUntilReset === 1 ? '1 hour' : `${hoursUntilReset} hours`;
+        } else {
+          timeUntilReset = minutesUntilReset === 1 ? '1 minute' : `${minutesUntilReset} minutes`;
+        }
+
+        const resetTime = resetAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        
+        const windowHours = rateLimitData?.windowHours || 12;
+        const hoursText = windowHours === 1 ? 'hour' : 'hours';
+        const limit = rateLimitData?.limit || 10;
+        const message = `You've reached your search limit of ${limit} searches per ${windowHours} ${hoursText}. Your limit will refresh in ${timeUntilReset} (at ${resetTime}).`;
+      
+        setToastMessage(message);
+        setToastType('info');
+        setShowToast(true);
+        setIsCheckingRateLimit(false);
+        return; // Don't navigate, don't close modal
+      }
+
+      // Rate limit allows, proceed with navigation
       // Track refinement
       analytics.refineSearchApply({
         vibes_changed: JSON.stringify(vibes) !== JSON.stringify(currentVibes),
@@ -63,7 +130,10 @@ export default function RefineSearchModal({
       onClose();
     } catch (error) {
       console.error('Error applying refinement:', error);
-      alert('Failed to apply refinement. Please try again.');
+      setToastMessage('Failed to apply refinement. Please try again.');
+      setToastType('error');
+      setShowToast(true);
+      setIsCheckingRateLimit(false);
     }
   };
 
@@ -80,25 +150,28 @@ export default function RefineSearchModal({
   ];
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="fixed inset-0 bg-black/50 z-50"
-          />
+    <>
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={onClose}
+              className="fixed inset-0 bg-black/50 z-50"
+            />
 
-          {/* Modal */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
-          >
+            {/* Modal */}
+            <motion.div
+              key="modal"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+            >
             <div
               onClick={(e) => e.stopPropagation()}
               className="card p-6 max-w-lg w-full pointer-events-auto max-h-[80vh] overflow-y-auto"
@@ -202,15 +275,25 @@ export default function RefineSearchModal({
                   <button
                     onClick={handleApply}
                     className="btn-primary flex-1"
+                    disabled={isCheckingRateLimit}
                   >
-                    Apply & Search
+                    {isCheckingRateLimit ? 'Checking...' : 'Apply & Search'}
                   </button>
                 </div>
               </div>
             </div>
           </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+          </>
+        )}
+      </AnimatePresence>
+      
+      {/* Toast notification - outside AnimatePresence to avoid key conflicts */}
+      <Toast
+        message={toastMessage}
+        type={toastType}
+        isVisible={showToast}
+        onClose={() => setShowToast(false)}
+      />
+    </>
   );
 }

@@ -80,7 +80,7 @@ POST /api/user/place-interactions
 **Get Places to Filter**
 ```
 GET /api/user/place-interactions/filter?destination=Paris&vibes=["cozy"]&originPlaceIds=["ChIJ..."]
-Response: { "placeIdsToFilter": ["ChIJ...", "ChIJ..."] }
+Response: { "placeIdsToPenalize": ["ChIJ...", "ChIJ..."] }
 ```
 
 **Mark as Saved/Unsaved** (automatic via saved-places endpoint)

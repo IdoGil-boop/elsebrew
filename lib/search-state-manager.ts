@@ -187,16 +187,68 @@ export async function saveCompleteSearchState(
         destination,
         vibes,
         freeText,
-        results: displayedResults.map(r => ({
-          placeId: r.place.id,
-          name: r.place.displayName,
-          score: r.score,
-        })),
-        allResults: allResults.map(r => ({
-          placeId: r.place.id,
-          name: r.place.displayName,
-          score: r.score,
-        })),
+        results: displayedResults.map(r => {
+          // Extract photoUrl from photos if available
+          let photoUrl: string | undefined = undefined;
+          try {
+            if (r.place.photos?.[0]) {
+              const photo = r.place.photos[0] as any;
+              if (typeof photo.getURI === 'function') {
+                photoUrl = photo.getURI({ maxWidth: 400 });
+              } else if (typeof photo.getUrl === 'function') {
+                photoUrl = photo.getUrl({ maxWidth: 400 });
+              }
+            }
+          } catch (error) {
+            // Ignore errors extracting photo URL
+          }
+          // Use existing photoUrl if available (from previous cache or details API)
+          if (!photoUrl && r.place.photoUrl) {
+            photoUrl = r.place.photoUrl;
+          }
+          
+          return {
+            placeId: r.place.id,
+            name: r.place.displayName,
+            score: r.score,
+            photoUrl,
+            reasoning: r.reasoning,
+            matchedKeywords: r.matchedKeywords || [],
+            distanceToCenter: r.distanceToCenter,
+            imageAnalysis: r.imageAnalysis, // Store AI image analysis
+          };
+        }),
+        allResults: allResults.map(r => {
+          // Extract photoUrl from photos if available
+          let photoUrl: string | undefined = undefined;
+          try {
+            if (r.place.photos?.[0]) {
+              const photo = r.place.photos[0] as any;
+              if (typeof photo.getURI === 'function') {
+                photoUrl = photo.getURI({ maxWidth: 400 });
+              } else if (typeof photo.getUrl === 'function') {
+                photoUrl = photo.getUrl({ maxWidth: 400 });
+              }
+            }
+          } catch (error) {
+            // Ignore errors extracting photo URL
+          }
+          // Use existing photoUrl if available (from previous cache or details API)
+          if (!photoUrl && r.place.photoUrl) {
+            photoUrl = r.place.photoUrl;
+          }
+          
+          return {
+            placeId: r.place.id,
+            name: r.place.displayName,
+            score: r.score,
+            photoUrl,
+            reasoning: r.reasoning,
+            matchedKeywords: r.matchedKeywords || [],
+            distanceToCenter: r.distanceToCenter,
+            imageAnalysis: r.imageAnalysis, // Store AI image analysis
+          };
+        }),
         shownPlaceIds: displayedResults.map(r => r.place.id),
         currentPage: 0,
         hasMorePages,

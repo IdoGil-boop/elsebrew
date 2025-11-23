@@ -184,6 +184,11 @@ export interface SearchHistoryItem {
     placeId: string;
     name: string;
     score: number;
+    photoUrl?: string; // Photo URL for cached results
+    reasoning?: string; // AI-generated description
+    matchedKeywords?: string[]; // Keywords that matched
+    distanceToCenter?: number; // Distance to destination center
+    imageAnalysis?: string; // AI image analysis
   }>;
   timestamp: string;
   // Pagination state
@@ -191,6 +196,11 @@ export interface SearchHistoryItem {
     placeId: string;
     name: string;
     score: number;
+    photoUrl?: string; // Photo URL for cached results
+    reasoning?: string; // AI-generated description
+    matchedKeywords?: string[]; // Keywords that matched
+    distanceToCenter?: number; // Distance to destination center
+    imageAnalysis?: string; // AI image analysis
   }>; // All fetched results from Google (not just top 5)
   shownPlaceIds?: string[]; // Place IDs already shown to user
   currentPage?: number; // Which page of Google results we're on
@@ -583,8 +593,18 @@ export interface EmailSubscription {
   source?: string; // e.g., 'homepage', 'footer'
 }
 
-const RATE_LIMIT_WINDOW_HOURS = 12;
-const RATE_LIMIT_MAX_SEARCHES = 1;
+const RATE_LIMIT_WINDOW_HOURS = parseInt(process.env.RATE_LIMIT_WINDOW_HOURS || '12', 10);
+const RATE_LIMIT_MAX_SEARCHES = parseInt(process.env.RATE_LIMIT_MAX_SEARCHES || '10', 10);
+
+/**
+ * Get rate limit configuration
+ */
+export function getRateLimitConfig(): { maxSearches: number; windowHours: number } {
+  return {
+    maxSearches: RATE_LIMIT_MAX_SEARCHES,
+    windowHours: RATE_LIMIT_WINDOW_HOURS,
+  };
+}
 
 /**
  * Get current rate limit info for a single identifier (without incrementing)

@@ -43,6 +43,10 @@ function ResultsContent() {
 
   // Ref to prevent duplicate searches in React Strict Mode
   const isSearchInProgress = useRef(false);
+  // Ref to track last executed search params to prevent duplicate executions
+  const lastExecutedSearchParams = useRef<string>('');
+  // Ref to preserve results when modifying search from results page
+  const preservedResultsRef = useRef<CafeMatch[]>([]);
 
   // Helper to get photo URL from new or legacy Google Places API
   const getPhotoUrl = (photo: any, maxWidth: number): string | undefined => {
@@ -63,6 +67,40 @@ function ResultsContent() {
     suppressGoogleMapsWarnings();
 
     const currentSearch = searchParams.toString();
+    
+    // Normalize search params (remove refineSearch for comparison)
+    const normalizeParams = (params: string) => {
+      const urlParams = new URLSearchParams(params);
+      urlParams.delete('refineSearch');
+      return urlParams.toString();
+    };
+    
+    const normalizedCurrent = normalizeParams(currentSearch);
+    const normalizedLast = normalizeParams(lastExecutedSearchParams.current);
+    
+    console.log('[Results Page] useEffect triggered', {
+      currentSearch,
+      isSearchInProgress: isSearchInProgress.current,
+      lastExecutedParams: lastExecutedSearchParams.current,
+      paramsMatch: lastExecutedSearchParams.current === currentSearch,
+      normalizedMatch: normalizedCurrent === normalizedLast,
+    });
+
+    // Prevent duplicate searches - only skip if we're actively executing the same search
+    if (isSearchInProgress.current && lastExecutedSearchParams.current === currentSearch) {
+      console.log('[Results Page] ⚠️ DUPLICATE DETECTED - Search already in progress for these params, skipping');
+      logger.debug('[Results Page] Search already in progress for these params, skipping duplicate');
+      return;
+    }
+
+    // If the only difference is refineSearch param being removed, skip the search
+    // (This happens after a refinement completes and we clean up the URL)
+    if (!isSearchInProgress.current && normalizedCurrent === normalizedLast && normalizedCurrent !== '') {
+      console.log('[Results Page] ⚠️ SKIPPING - Only refineSearch param changed, not running new search');
+      // Update lastExecutedParams to match current (without refineSearch)
+      lastExecutedSearchParams.current = currentSearch;
+      return;
+    }
     const savedState = storage.getResultsState();
 
     // Check if we're restoring from saved page with matching params
@@ -91,6 +129,8 @@ function ResultsContent() {
         imageAnalysis: r.imageAnalysis,
       }));
       setResults(restoredResults);
+      // Preserve restored results for future refinements
+      preservedResultsRef.current = [...restoredResults];
       // Restore map center if available
       if (savedState.mapCenter) {
         setMapCenter(savedState.mapCenter);
@@ -101,16 +141,65 @@ function ResultsContent() {
       return; // Don't run the search again
     }
 
-    // New search or params changed - reset state and clear old cache
+    // New search or params changed
+    // If this is a refinement (user modifying from results page), preserve current results
+    // Only clear state if this is a fresh search from home page (not a refinement)
+    
+    // For refinements, try to preserve/restore results
+    // First check if we have results in state, if not, check preserved ref
+    if (isRefinement) {
+      if (results.length > 0) {
+        // We have results, preserve them
+        preservedResultsRef.current = [...results];
+        console.log('[Results] Preserved results for refinement:', results.length);
+      } else if (preservedResultsRef.current.length > 0) {
+        // Results were cleared, restore from preserved ref
+        setResults([...preservedResultsRef.current]);
+        console.log('[Results] Restored results from ref for refinement:', preservedResultsRef.current.length);
+      } else {
+        // No results and nothing preserved - try to get from savedState
+        if (savedState && savedState.results && savedState.results.length > 0) {
+          const restoredResults: CafeMatch[] = savedState.results.map((r: any) => ({
+            place: {
+              id: r.place.id,
+              displayName: r.place.displayName,
+              formattedAddress: r.place.formattedAddress,
+              rating: r.place.rating,
+              userRatingCount: r.place.userRatingCount,
+              priceLevel: r.place.priceLevel,
+              types: r.place.types,
+              primaryType: r.place.primaryType,
+              editorialSummary: r.place.editorialSummary,
+              photoUrl: r.place.photoUrl,
+            } as PlaceBasicInfo,
+            score: r.score,
+            reasoning: r.reasoning,
+            matchedKeywords: r.matchedKeywords,
+            distanceToCenter: r.distanceToCenter,
+            imageAnalysis: r.imageAnalysis,
+          }));
+          setResults(restoredResults);
+          preservedResultsRef.current = [...restoredResults];
+          console.log('[Results] Restored results from savedState for refinement:', restoredResults.length);
+        }
+      }
+    }
+    
     setIsLoading(true);
     setError(null);
-    setResults([]);
-    setSelectedResult(null);
-    setSelectedIndex(null);
-    // Clear any old cached results since this is a new search
-    if (savedState && savedState.searchParams !== currentSearch) {
-      storage.setResultsState(null);
+    
+    // Only clear results/state if this is NOT a refinement (fresh search from home page)
+    if (!isRefinement) {
+      setResults([]);
+      setSelectedResult(null);
+      setSelectedIndex(null);
+      preservedResultsRef.current = [];
+      // Clear any old cached results since this is a new search
+      if (savedState && savedState.searchParams !== currentSearch) {
+        storage.setResultsState(null);
+      }
     }
+    // If isRefinement, don't clear anything - keep drawer open, keep results visible
 
     // Debug: Check auth state on results page load
     const userProfile = storage.getUserProfile();
@@ -121,14 +210,9 @@ function ResultsContent() {
       tokenLength: userProfile?.token?.length,
     });
 
-    // Prevent duplicate searches in React Strict Mode
-    if (isSearchInProgress.current) {
-      logger.debug('[Results Page] Search already in progress, skipping duplicate');
-      return;
-    }
-
     const performSearch = async () => {
       const startTime = Date.now();
+      console.log('[Results Page] Starting performSearch', { currentSearch });
       isSearchInProgress.current = true;
 
       try {
@@ -142,8 +226,12 @@ function ResultsContent() {
         if (!destCity || !vibesParam) {
           setError('Missing search parameters');
           setIsLoading(false);
+          isSearchInProgress.current = false;
           return;
         }
+
+        // Mark these params as being executed only after validation passes
+        lastExecutedSearchParams.current = currentSearch;
 
         // Check rate limit before performing search
         const authToken = getAuthToken();
@@ -162,11 +250,17 @@ function ResultsContent() {
 
           console.log('[Results] Rate limit response status:', rateLimitResponse.status);
 
+          // Parse JSON even if status is not OK (429 still contains rate limit data)
+          rateLimitData = await rateLimitResponse.json();
+
           if (!rateLimitResponse.ok) {
             logger.error('[Results] Rate limit API error:', rateLimitResponse.status, rateLimitResponse.statusText);
+            // If response is not OK, rateLimitData.allowed should be false, but ensure it is
+            if (rateLimitData.allowed !== false) {
+              rateLimitData.allowed = false;
+            }
           }
 
-          rateLimitData = await rateLimitResponse.json();
           console.log('[Results] Rate limit check result:', {
             allowed: rateLimitData.allowed,
             currentCount: rateLimitData.currentCount,
@@ -191,9 +285,10 @@ function ResultsContent() {
           return;
         }
 
-        if (!rateLimitData.allowed) {
+        // Safety check: if rateLimitData is missing or allowed is false, block the search
+        if (!rateLimitData || rateLimitData.allowed === false || !rateLimitData.allowed) {
           // Format reset time nicely
-          const resetAt = new Date(rateLimitData.resetAt);
+          const resetAt = rateLimitData?.resetAt ? new Date(rateLimitData.resetAt) : new Date(Date.now() + 12 * 60 * 60 * 1000);
           const now = new Date();
           const hoursUntilReset = Math.ceil((resetAt.getTime() - now.getTime()) / (1000 * 60 * 60));
           const minutesUntilReset = Math.ceil((resetAt.getTime() - now.getTime()) / (1000 * 60));
@@ -208,23 +303,29 @@ function ResultsContent() {
           const resetTime = resetAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
           
           // Build message - only suggest sign-in if not already authenticated
-          const isAuthenticated = rateLimitData.isAuthenticated !== false; // Default to true if not provided
-          let message = `You've reached your search limit of ${rateLimitData.limit} searches per 12 hours. Your limit will refresh in ${timeUntilReset} (at ${resetTime}).`;
+          const isAuthenticated = rateLimitData?.isAuthenticated !== false; // Default to true if not provided
+          const windowHours = rateLimitData?.windowHours || 12;
+          const hoursText = windowHours === 1 ? 'hour' : 'hours';
+          const limit = rateLimitData?.limit || 10;
+          let message = `You've reached your search limit of ${limit} searches per ${windowHours} ${hoursText}. Your limit will refresh in ${timeUntilReset} (at ${resetTime}).`;
         
+          // If this was a refinement, restore preserved results (they should never have been cleared, but be safe)
+          if (isRefinement && preservedResultsRef.current.length > 0) {
+            // Only restore if results are actually empty (defensive check)
+            if (results.length === 0) {
+              setResults(preservedResultsRef.current);
+            }
+          }
           
+          // Don't change anything - results/state were never cleared, so nothing to restore
+          // Just show the toast message
           setToastMessage(message);
           setToastType('info');
           setShowToast(true);
           setIsLoading(false);
           isSearchInProgress.current = false;
           
-          // If this is a new search from home page (not a refinement), redirect back to home
-          // If this is a refinement from results page, stay on results page with current results
-          if (!isRefinement) {
-            // New search from home - redirect back to search screen
-            router.push('/');
-          }
-          // If refinement, stay on results page - current results will remain visible
+          // Don't change anything else - keep drawer open, keep results visible, don't reload
           return;
         }
 
@@ -316,21 +417,27 @@ function ResultsContent() {
                   // Serve next 5 unseen results
                   const nextBatch = unseenResults.slice(0, 5);
 
-                  // Reconstruct CafeMatch objects (without full place details for now)
-                  // We'll need to fetch full details if needed, but for now just show what we have
+                  // Reconstruct CafeMatch objects with all cached data
                   const cachedMatches: CafeMatch[] = nextBatch.map((r: any) => ({
                     place: {
                       id: r.placeId,
                       displayName: r.name,
+                      photoUrl: r.photoUrl, // Include photoUrl from cache
                     } as PlaceBasicInfo,
                     score: r.score,
-                    matchedKeywords: [],
-                    reasoning: 'From your previous search results',
+                    reasoning: r.reasoning || 'Similar vibe and quality.', // Use cached AI description
+                    matchedKeywords: r.matchedKeywords || [],
+                    distanceToCenter: r.distanceToCenter,
+                    imageAnalysis: r.imageAnalysis, // Restore AI image analysis
                   }));
 
                   setResults(cachedMatches);
+                  // Preserve cached results for future refinements
+                  preservedResultsRef.current = [...cachedMatches];
                   setCurrentSearchId(searchId);
                   setIsLoading(false);
+                  lastExecutedSearchParams.current = currentSearch; // Mark as executed
+                  isSearchInProgress.current = false; // Reset flag since we're done
 
                   // Mark these as shown
                   const newlyShownIds = nextBatch.map((r: any) => r.placeId);
@@ -430,14 +537,43 @@ function ResultsContent() {
 
         // Geocode destination
         const geocoder = new google.maps.Geocoder();
-        const geocodeResult = await geocoder.geocode({ address: destCity });
-
-        if (!geocodeResult.results[0]) {
-          throw new Error('Failed to geocode destination');
+        let geocodeResult;
+        try {
+          geocodeResult = await new Promise<google.maps.GeocoderResult[]>((resolve, reject) => {
+            geocoder.geocode({ address: destCity }, (results, status) => {
+              if (status === google.maps.GeocoderStatus.OK && results) {
+                resolve(results);
+              } else if (status === google.maps.GeocoderStatus.ZERO_RESULTS) {
+                reject(new Error(`Could not find location for "${destCity}". Please try a more specific city or address.`));
+              } else {
+                reject(new Error(`Geocoding failed: ${status}`));
+              }
+            });
+          });
+        } catch (error: any) {
+          logger.error('[Results] Geocoding error:', error);
+          setError(error.message || 'Failed to geocode destination. Please try a different city or address.');
+          setIsLoading(false);
+          isSearchInProgress.current = false;
+          return;
         }
 
-        const destResult = geocodeResult.results[0];
+        if (!geocodeResult || !geocodeResult[0]) {
+          setError(`Could not find location for "${destCity}". Please try a more specific city or address.`);
+          setIsLoading(false);
+          isSearchInProgress.current = false;
+          return;
+        }
+
+        const destResult = geocodeResult[0];
         const destGeometry = destResult.geometry;
+        if (!destGeometry || !destGeometry.location) {
+          setError(`Invalid location data for "${destCity}". Please try a different city or address.`);
+          setIsLoading(false);
+          isSearchInProgress.current = false;
+          return;
+        }
+
         const destCenter = destGeometry.location;
         const destBounds = destGeometry.viewport;
         const destTypes = destResult.types || [];
@@ -471,9 +607,9 @@ function ResultsContent() {
           ].slice(0, 5);
         }
 
-        // Get places to filter out (seen but not saved)
+        // Get places to penalize (seen but not saved)
         // Works for both logged-in users (by userId) and anonymous users (by IP)
-        let placeIdsToFilter: string[] = [];
+        let placeIdsToPenalize: string[] = [];
         try {
           const vibesArray = Object.entries(vibes)
             .filter(([_, enabled]) => enabled)
@@ -498,8 +634,8 @@ function ResultsContent() {
 
           if (filterResponse.ok) {
             const data = await filterResponse.json();
-            placeIdsToFilter = data.placeIdsToFilter || [];
-            logger.debug('[Results] Filtering out seen places:', placeIdsToFilter.length);
+            placeIdsToPenalize = data.placeIdsToPenalize || [];
+            logger.debug('[Results] Found seen places to penalize:', placeIdsToPenalize.length);
           }
         } catch (error) {
           logger.warn('[Results] Failed to fetch filter list:', error);
@@ -524,7 +660,7 @@ function ResultsContent() {
           destTypes, // Pass destination types to determine if it's an area or point
           destResult.place_id, // Pass destination place ID for boundary verification
           sourcePlaces, // Pass all origin places for type overlap scoring
-          placeIdsToFilter, // Pass places to filter out
+          placeIdsToPenalize, // Pass places to penalize
           undefined, // pageToken
           freeText || '' // Pass free text for field relevance detection
         );
@@ -638,6 +774,8 @@ function ResultsContent() {
         }
 
         setResults(matchesWithReasoning);
+        // Preserve results whenever they're set (for future refinements)
+        preservedResultsRef.current = [...matchesWithReasoning];
 
         // Save search state with pagination info
         const originPlaceObjs = sourcePlaceIds.map((id, idx) => ({
@@ -714,20 +852,27 @@ function ResultsContent() {
         });
 
         setIsLoading(false);
+        console.log('[Results Page] Search completed successfully');
       } catch (err) {
         logger.error('Search error:', err);
+        console.log('[Results Page] Search failed:', err);
         setError(err instanceof Error ? err.message : 'Search failed');
         setIsLoading(false);
       } finally {
+        console.log('[Results Page] Resetting isSearchInProgress flag');
         isSearchInProgress.current = false;
       }
     };
 
     performSearch();
 
-    // Cleanup function to reset the flag when searchParams change
+    // Cleanup function - don't reset isSearchInProgress here as it's handled in finally block
+    // Only reset if searchParams actually changed (not just a re-render)
     return () => {
-      isSearchInProgress.current = false;
+      // Only reset if the params are different (component unmounting or params changed)
+      if (lastExecutedSearchParams.current !== currentSearch) {
+        isSearchInProgress.current = false;
+      }
     };
   }, [searchParams]);
 
@@ -880,7 +1025,9 @@ function ResultsContent() {
   }
 
   // Don't show "No matches found" if we're still loading
-  if (results.length === 0 && !isLoading) {
+  // Also don't show it if we have preserved results from a refinement (rate limit hit)
+  const hasPreservedResults = preservedResultsRef.current.length > 0;
+  if (results.length === 0 && !isLoading && !hasPreservedResults) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center max-w-md">

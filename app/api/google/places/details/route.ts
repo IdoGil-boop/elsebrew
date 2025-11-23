@@ -27,7 +27,8 @@ export async function POST(request: Request) {
 
     // Determine which fields are relevant based on query
     const relevantFields = getRelevantFields(vibes, keywords, freeText);
-    const fieldMask = relevantFields.length > 0 ? relevantFields.join(',') : ADVANCED_PLACE_FIELD_MASK;
+    // Always include photos in the field mask
+    const fieldMask = `photos,${relevantFields.length > 0 ? relevantFields.join(',') : ADVANCED_PLACE_FIELD_MASK}`;
 
     const apiKey = process.env.GOOGLE_MAPS_API_KEY;
 
@@ -76,7 +77,24 @@ export async function POST(request: Request) {
             return null;
           }
 
-          const filteredFields: AdvancedPlaceFieldValues = {};
+          const filteredFields: AdvancedPlaceFieldValues & { photoUrls?: string[] } = {};
+          // Convert photos to URLs if available
+          if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
+            // Construct photo URLs from photo names
+            // Format: places/PLACE_ID/photos/PHOTO_REFERENCE
+            const photoUrls = data.photos.slice(0, 4).map((photo: any) => {
+              if (photo.name) {
+                // Use the Photo API endpoint to get the actual image URL
+                // Format: https://places.googleapis.com/v1/{name}/media?maxWidthPx=800&key={apiKey}
+                return `https://places.googleapis.com/v1/${photo.name}/media?maxWidthPx=800&key=${apiKey}`;
+              }
+              return null;
+            }).filter((url: string | null): url is string => url !== null);
+            
+            if (photoUrls.length > 0) {
+              filteredFields.photoUrls = photoUrls;
+            }
+          }
           // Only include fields that were requested (relevantFields)
           relevantFields.forEach((field) => {
             if (data[field] !== undefined) {
