@@ -48,28 +48,38 @@ export const track = (event: AnalyticsEvent) => {
   const trafficSource = getStoredTrafficSource();
   const enrichedParams = { ...trafficSource, ...params };
 
-  // GA4 - use dataLayer to queue events even if gtag isn't loaded yet
-  if (process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID) {
-    // Initialize dataLayer if it doesn't exist
-    if (!window.dataLayer) {
-      window.dataLayer = [];
-    }
+  const GA4_ID = process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID;
 
-    // Push event to dataLayer (gtag will process it when it loads)
-    window.dataLayer.push({
-      event: name,
-      ...enrichedParams,
-    });
+  // GA4 - use gtag('event', ...) directly (standard GA4 pattern)
+  if (GA4_ID && window.gtag && typeof window.gtag === 'function') {
+    try {
+      // Call gtag with event - this is the standard way to send events
+      window.gtag('event', name, enrichedParams);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Analytics] Event sent:', name, enrichedParams);
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[Analytics] Error calling gtag:', error);
+      }
+    }
+  } else if (GA4_ID && process.env.NODE_ENV === 'development') {
+    console.warn('[Analytics] gtag not available - event not sent:', name);
+  } else if (process.env.NODE_ENV === 'development') {
+    console.warn('[Analytics] NEXT_PUBLIC_GA4_MEASUREMENT_ID not set');
   }
 
   // Plausible (if GA4 not configured)
-  if (window.plausible && !process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID) {
+  if (window.plausible && !GA4_ID) {
     window.plausible(name, { props: enrichedParams });
   }
 
   // Debug log in development
   if (process.env.NODE_ENV === 'development') {
-    console.log('[Analytics]', name, enrichedParams);
+    console.log('[Analytics]', name, enrichedParams, GA4_ID ? '(GA4 enabled)' : '(GA4 disabled)');
+    console.log('[Analytics] dataLayer length:', window.dataLayer?.length);
+    console.log('[Analytics] gtag type:', typeof window.gtag);
   }
 };
 

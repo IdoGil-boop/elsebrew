@@ -89,13 +89,42 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     };
 
-    await saveSearchHistory(searchState);
+    try {
+      await saveSearchHistory(searchState);
+      logger.debug('[Search State API] Successfully saved search state', { userId, searchId });
+    } catch (dbError: any) {
+      // Check if it's a credentials error
+      if (dbError?.message?.includes('credentials') || dbError?.message?.includes('DYNAMODB')) {
+        logger.error('[Search State API] DynamoDB credentials not configured:', dbError.message);
+        return NextResponse.json(
+          { 
+            error: 'Database not configured',
+            details: 'DynamoDB credentials are missing. Searches will not be saved.',
+            localStorage: true // Signal to frontend to use localStorage fallback
+          },
+          { status: 503 }
+        );
+      }
+      // Check if it's a table doesn't exist error
+      if (dbError?.name === 'ResourceNotFoundException') {
+        logger.error('[Search State API] DynamoDB table does not exist:', dbError.message);
+        return NextResponse.json(
+          { 
+            error: 'Database table not found',
+            details: 'The search history table does not exist. Please create it first.',
+          },
+          { status: 503 }
+        );
+      }
+      // Re-throw other errors
+      throw dbError;
+    }
 
     return NextResponse.json({ success: true, searchId });
   } catch (error) {
     logger.error('[Search State API] POST error:', error);
     return NextResponse.json(
-      { error: 'Failed to save search state' },
+      { error: 'Failed to save search state', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
