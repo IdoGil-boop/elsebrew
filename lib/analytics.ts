@@ -8,10 +8,45 @@ declare global {
   }
 }
 
+/**
+ * Capture and store source parameter from URL (e.g., ?source=reddit_r_coffee)
+ * Stores in sessionStorage so it persists across page navigations
+ */
+export const captureTrafficSource = (): { source?: string } => {
+  if (typeof window === 'undefined') return {};
+
+  const params = new URLSearchParams(window.location.search);
+  const source = params.get('source') || undefined;
+
+  // Store in sessionStorage for persistence across navigations
+  if (source) {
+    sessionStorage.setItem('traffic_source', JSON.stringify({ source }));
+  }
+
+  return source ? { source } : {};
+};
+
+/**
+ * Get stored traffic source from sessionStorage
+ */
+const getStoredTrafficSource = (): Record<string, string> => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const stored = sessionStorage.getItem('traffic_source');
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+};
+
 export const track = (event: AnalyticsEvent) => {
   const { name, params = {} } = event;
 
   if (typeof window === 'undefined') return;
+
+  // Get stored traffic source (UTM params + referrer) and merge with event params
+  const trafficSource = getStoredTrafficSource();
+  const enrichedParams = { ...trafficSource, ...params };
 
   // GA4 - use dataLayer to queue events even if gtag isn't loaded yet
   if (process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID) {
@@ -23,18 +58,18 @@ export const track = (event: AnalyticsEvent) => {
     // Push event to dataLayer (gtag will process it when it loads)
     window.dataLayer.push({
       event: name,
-      ...params,
+      ...enrichedParams,
     });
   }
 
   // Plausible (if GA4 not configured)
   if (window.plausible && !process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID) {
-    window.plausible(name, { props: params });
+    window.plausible(name, { props: enrichedParams });
   }
 
   // Debug log in development
   if (process.env.NODE_ENV === 'development') {
-    console.log('[Analytics]', name, params);
+    console.log('[Analytics]', name, enrichedParams);
   }
 };
 

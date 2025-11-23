@@ -192,11 +192,11 @@ export default function Header() {
             {/* Buy Me A Coffee - Right side */}
             <button
               onClick={handleBuyMeCoffee}
-              className="text-xs px-3 sm:px-5 py-2 bg-espresso/5 hover:bg-espresso/10 text-espresso rounded-lg transition-colors inline-flex items-center space-x-1.5 border-brown border border-transperant hover:border-espresso"
+              className="text-[10px] sm:text-xs px-3.5 sm:px-5 py-2 bg-espresso/5 hover:bg-espresso/10 text-espresso rounded-lg transition-colors inline-flex items-center space-x-1.5 border-brown border border-transperant hover:border-espresso"
             >
               <span>☕</span>
               <span className="hidden sm:inline">Buy Me A Coffee</span>
-              <span className="sm:hidden">Coffee</span>
+              <span className="sm:hidden">Buy Me Coffee</span>
             </button>
           </nav>
         </div>

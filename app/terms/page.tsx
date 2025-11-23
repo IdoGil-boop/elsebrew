@@ -21,7 +21,7 @@ export default function TermsPage() {
 
         <h2 className="text-2xl font-serif font-semibold mt-8 mb-4">3. Validation/Beta Status</h2>
         <p className="text-gray-700 mb-4">
-          Elsebrew is currently a "fake-door MVP" for validation purposes. While the search
+          Elsebrew is currently a validation project. While the search
           results are real and powered by Google Maps data, the service is provided "as is"
           without guarantees of accuracy, completeness, or continued availability.
         </p>

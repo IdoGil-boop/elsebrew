@@ -3,11 +3,16 @@
 import { useEffect } from 'react';
 import Script from 'next/script';
 import { usePathname } from 'next/navigation';
-import { trackPageView } from '@/lib/analytics';
+import { trackPageView, captureTrafficSource } from '@/lib/analytics';
 
 export default function AnalyticsProvider() {
   const pathname = usePathname();
   const GA4_ID = process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID;
+
+  // Capture UTM parameters and referrer on mount
+  useEffect(() => {
+    captureTrafficSource();
+  }, []);
 
   // Initialize dataLayer immediately (before scripts load) so events can queue
   useEffect(() => {

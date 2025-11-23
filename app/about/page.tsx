@@ -31,7 +31,7 @@ export default function AboutPage() {
           is never too far away.
         </p>
 
-        <h2 className="text-2xl font-serif font-semibold mt-8 mb-4">This is a fake-door MVP</h2>
+        <h2 className="text-2xl font-serif font-semibold mt-8 mb-4">This is an MVP</h2>
         <p className="text-gray-700 mb-4">
           Elsebrew is currently a validation project. I'm testing whether coffee lovers
           actually want this tool before building the full product. Your searches are real,
