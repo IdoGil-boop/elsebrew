@@ -42,7 +42,7 @@ export default function DebugAnalyticsPage() {
     // Log dataLayer after event
     setTimeout(() => {
       console.log('[Debug] dataLayer after event:', window.dataLayer);
-      setDiagnostics(prev => ({
+      setDiagnostics((prev: any) => ({
         ...prev,
         dataLayerAfterEvent: window.dataLayer ? [...window.dataLayer] : [],
       }));
@@ -59,7 +59,7 @@ export default function DebugAnalyticsPage() {
 
       setTimeout(() => {
         console.log('[Debug] dataLayer after direct gtag call:', window.dataLayer);
-        setDiagnostics(prev => ({
+        setDiagnostics((prev: any) => ({
           ...prev,
           dataLayerAfterDirectCall: window.dataLayer ? [...window.dataLayer] : [],
         }));
