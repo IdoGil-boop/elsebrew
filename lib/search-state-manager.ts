@@ -2,6 +2,129 @@ import { SearchState, CafeMatch, VibeToggles } from '@/types';
 import { getAuthToken } from './storage';
 
 /**
+ * Initialize a search in pending status
+ * Called immediately after rate limit check passes
+ */
+export async function initializeSearch(
+  searchId: string,
+  originPlaces: Array<{ placeId: string; name: string }>,
+  destination: string,
+  vibes: string[],
+  freeText?: string
+): Promise<void> {
+  try {
+    const authToken = getAuthToken();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    await fetch('/api/search-state/initialize', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        searchId,
+        originPlaces,
+        destination,
+        vibes,
+        freeText,
+      }),
+    });
+  } catch (error) {
+    console.error('[Search State Manager] Error initializing search:', error);
+    // Don't throw - initialization is best effort
+  }
+}
+
+/**
+ * Mark search as failed with error details
+ */
+export async function markSearchFailed(
+  searchId: string,
+  stage: 'rate_limit' | 'geocoding' | 'place_search' | 'ai_analysis' | 'unknown',
+  message: string
+): Promise<void> {
+  try {
+    const authToken = getAuthToken();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    await fetch('/api/search-state/fail', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        searchId,
+        stage,
+        message,
+      }),
+    });
+  } catch (error) {
+    console.error('[Search State Manager] Error marking search as failed:', error);
+    // Don't throw - failure tracking is best effort
+  }
+}
+
+/**
+ * Mark search as successful with results
+ */
+export async function markSearchSuccessful(
+  searchId: string,
+  results: Array<{
+    placeId: string;
+    name: string;
+    score: number;
+    photoUrl?: string;
+    reasoning?: string;
+    matchedKeywords?: string[];
+    distanceToCenter?: number;
+    imageAnalysis?: string;
+  }>,
+  allResults?: Array<{
+    placeId: string;
+    name: string;
+    score: number;
+    photoUrl?: string;
+    reasoning?: string;
+    matchedKeywords?: string[];
+    distanceToCenter?: number;
+    imageAnalysis?: string;
+  }>,
+  hasMorePages?: boolean,
+  nextPageToken?: string
+): Promise<void> {
+  try {
+    const authToken = getAuthToken();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    await fetch('/api/search-state/success', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        searchId,
+        results,
+        allResults,
+        hasMorePages,
+        nextPageToken,
+      }),
+    });
+  } catch (error) {
+    console.error('[Search State Manager] Error marking search as successful:', error);
+    // Don't throw - success tracking is best effort
+  }
+}
+
+/**
  * Generate a unique search ID based on search parameters
  */
 export function generateSearchId(

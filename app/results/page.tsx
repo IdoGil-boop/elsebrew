@@ -14,7 +14,7 @@ import DetailsDrawer from '@/components/results/DetailsDrawer';
 import RefineSearchModal from '@/components/results/RefineSearchModal';
 import Toast from '@/components/shared/Toast';
 import { getAuthToken, storage } from '@/lib/storage';
-import { generateSearchId, saveCompleteSearchState } from '@/lib/search-state-manager';
+import { generateSearchId, saveCompleteSearchState, initializeSearch, markSearchFailed, markSearchSuccessful } from '@/lib/search-state-manager';
 import { logger, suppressGoogleMapsWarnings } from '@/lib/logger';
 
 function ResultsContent() {
@@ -469,12 +469,39 @@ function ResultsContent() {
           }
         }
 
+        // Initialize search history (register search as 'pending')
+        // Get source place names for initialization
+        let sourceNamesForInit: string[] = [];
+        if (sourceNamesParam) {
+          sourceNamesForInit = JSON.parse(sourceNamesParam);
+        }
+        const originPlacesForInit = sourcePlaceIds.map((id, idx) => ({
+          placeId: id,
+          name: sourceNamesForInit[idx] || 'Unknown',
+        }));
+        const vibesArray = Object.entries(vibes)
+          .filter(([_, enabled]) => enabled)
+          .map(([vibe]) => vibe);
+
+        await initializeSearch(
+          searchId,
+          originPlacesForInit,
+          destCity,
+          vibesArray,
+          freeText || undefined
+        );
+
         // Load Google Maps with better error handling
         let google;
         try {
           google = await loadGoogleMaps();
         } catch (mapError) {
           logger.error('[Results] Failed to load Google Maps:', mapError);
+          await markSearchFailed(
+            searchId,
+            'unknown',
+            'Failed to load Google Maps. Please check your API key configuration.'
+          );
           throw new Error('Failed to load Google Maps. Please check your API key configuration.');
         }
 
@@ -552,14 +579,18 @@ function ResultsContent() {
           });
         } catch (error: any) {
           logger.error('[Results] Geocoding error:', error);
-          setError(error.message || 'Failed to geocode destination. Please try a different city or address.');
+          const errorMessage = error.message || 'Failed to geocode destination. Please try a different city or address.';
+          await markSearchFailed(searchId, 'geocoding', errorMessage);
+          setError(errorMessage);
           setIsLoading(false);
           isSearchInProgress.current = false;
           return;
         }
 
         if (!geocodeResult || !geocodeResult[0]) {
-          setError(`Could not find location for "${destCity}". Please try a more specific city or address.`);
+          const errorMessage = `Could not find location for "${destCity}". Please try a more specific city or address.`;
+          await markSearchFailed(searchId, 'geocoding', errorMessage);
+          setError(errorMessage);
           setIsLoading(false);
           isSearchInProgress.current = false;
           return;
@@ -568,7 +599,9 @@ function ResultsContent() {
         const destResult = geocodeResult[0];
         const destGeometry = destResult.geometry;
         if (!destGeometry || !destGeometry.location) {
-          setError(`Invalid location data for "${destCity}". Please try a different city or address.`);
+          const errorMessage = `Invalid location data for "${destCity}". Please try a different city or address.`;
+          await markSearchFailed(searchId, 'geocoding', errorMessage);
+          setError(errorMessage);
           setIsLoading(false);
           isSearchInProgress.current = false;
           return;
@@ -611,10 +644,6 @@ function ResultsContent() {
         // Works for both logged-in users (by userId) and anonymous users (by IP)
         let placeIdsToPenalize: string[] = [];
         try {
-          const vibesArray = Object.entries(vibes)
-            .filter(([_, enabled]) => enabled)
-            .map(([vibe]) => vibe);
-
           const authToken = getAuthToken();
           const headers: HeadersInit = {};
           if (authToken) {
@@ -643,9 +672,6 @@ function ResultsContent() {
         }
 
         // Set the search ID (already generated earlier)
-        const vibesArray = Object.entries(vibes)
-          .filter(([_, enabled]) => enabled)
-          .map(([vibe]) => vibe);
         setCurrentSearchId(searchId);
 
         // Search for matching cafes
@@ -777,23 +803,68 @@ function ResultsContent() {
         // Preserve results whenever they're set (for future refinements)
         preservedResultsRef.current = [...matchesWithReasoning];
 
-        // Save search state with pagination info
-        const originPlaceObjs = sourcePlaceIds.map((id, idx) => ({
-          placeId: id,
-          name: sourcePlaces[idx]?.displayName || 'Unknown',
-        }));
+        // Mark search as successful and save results
+        const resultsToSave = matchesWithReasoning.map(r => {
+          // Extract photoUrl from photos if available
+          let photoUrl: string | undefined = undefined;
+          try {
+            if (r.place.photos?.[0]) {
+              photoUrl = getPhotoUrl(r.place.photos[0], 400);
+            }
+          } catch (error) {
+            // Ignore errors extracting photo URL
+          }
+          // Use existing photoUrl if available (from previous cache or details API)
+          if (!photoUrl && r.place.photoUrl) {
+            photoUrl = r.place.photoUrl;
+          }
 
-        saveCompleteSearchState(
+          return {
+            placeId: r.place.id,
+            name: r.place.displayName,
+            score: r.score,
+            photoUrl,
+            reasoning: r.reasoning,
+            matchedKeywords: r.matchedKeywords || [],
+            distanceToCenter: r.distanceToCenter,
+            imageAnalysis: r.imageAnalysis,
+          };
+        });
+
+        const allResultsToSave = searchResult.allScoredResults.map(r => {
+          // Extract photoUrl from photos if available
+          let photoUrl: string | undefined = undefined;
+          try {
+            if (r.place.photos?.[0]) {
+              photoUrl = getPhotoUrl(r.place.photos[0], 400);
+            }
+          } catch (error) {
+            // Ignore errors extracting photo URL
+          }
+          // Use existing photoUrl if available (from previous cache or details API)
+          if (!photoUrl && r.place.photoUrl) {
+            photoUrl = r.place.photoUrl;
+          }
+
+          return {
+            placeId: r.place.id,
+            name: r.place.displayName,
+            score: r.score,
+            photoUrl,
+            reasoning: r.reasoning,
+            matchedKeywords: r.matchedKeywords || [],
+            distanceToCenter: r.distanceToCenter,
+            imageAnalysis: r.imageAnalysis,
+          };
+        });
+
+        markSearchSuccessful(
           searchId,
-          originPlaceObjs,
-          destCity,
-          vibesArray,
-          freeText || undefined,
-          matchesWithReasoning,
-          searchResult.allScoredResults,
+          resultsToSave,
+          allResultsToSave,
           searchResult.hasMorePages,
           searchResult.nextPageToken
-        ).catch(err => logger.warn('[Results] Failed to save search state:', err));
+        ).catch(err => logger.warn('[Results] Failed to mark search as successful:', err));
 
         // Record place views for all users (logged-in and anonymous)
         if (matchesWithReasoning.length > 0) {
@@ -856,7 +927,14 @@ function ResultsContent() {
       } catch (err) {
         logger.error('Search error:', err);
         console.log('[Results Page] Search failed:', err);
-        setError(err instanceof Error ? err.message : 'Search failed');
+        const errorMessage = err instanceof Error ? err.message : 'Search failed';
+
+        // Mark search as failed if we have a searchId
+        if (currentSearchId) {
+          await markSearchFailed(currentSearchId, 'unknown', errorMessage);
+        }
+
+        setError(errorMessage);
         setIsLoading(false);
       } finally {
         console.log('[Results Page] Resetting isSearchInProgress flag');

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/auth';
-import { getSearchState, saveSearchHistory, updateSearchState } from '@/lib/dynamodb';
+import { getSearchState, saveSearchHistory, updateSearchState, initializeSearchHistory, markSearchAsFailed, markSearchAsSuccessful } from '@/lib/dynamodb';
 import { getClientIp } from '@/lib/ip-utils';
 import { logger } from '@/lib/logger';
 
@@ -87,6 +87,9 @@ export async function POST(request: NextRequest) {
       hasMorePages: hasMorePages || false,
       nextPageToken,
       timestamp: new Date().toISOString(),
+      status: 'success' as const, // Default to success for backward compatibility
+      initiatedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
     };
 
     try {

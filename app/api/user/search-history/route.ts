@@ -42,6 +42,9 @@ export async function POST(request: NextRequest) {
       freeText: body.freeText,
       results: body.results,
       timestamp: new Date().toISOString(),
+      status: 'success', // Default to success for backward compatibility
+      initiatedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
     };
 
     await saveSearchHistory(searchItem);

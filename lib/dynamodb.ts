@@ -191,6 +191,15 @@ export interface SearchHistoryItem {
     imageAnalysis?: string; // AI image analysis
   }>;
   timestamp: string;
+  // Search status tracking
+  status: 'pending' | 'success' | 'failed';
+  initiatedAt: string; // When search was started
+  completedAt?: string; // When search completed (success or failure)
+  error?: {
+    stage: 'rate_limit' | 'geocoding' | 'place_search' | 'ai_analysis' | 'unknown';
+    message: string;
+    timestamp: string;
+  };
   // Pagination state
   allResults?: Array<{
     placeId: string;
@@ -305,6 +314,90 @@ export async function getSearchHistory(userId: string, limit = 20): Promise<Sear
     })
   );
   return result.Items as SearchHistoryItem[] || [];
+}
+
+/**
+ * Initialize a new search history entry with 'pending' status
+ * Called immediately after rate limit check passes
+ */
+export async function initializeSearchHistory(
+  userId: string,
+  searchId: string,
+  originPlaces: Array<{ placeId: string; name: string }>,
+  destination: string,
+  vibes: string[],
+  freeText?: string
+): Promise<void> {
+  const db = await getDynamoDB();
+  const now = new Date().toISOString();
+
+  await db.send(
+    new PutCommand({
+      TableName: TABLES.SEARCH_HISTORY,
+      Item: {
+        userId,
+        searchId,
+        originPlaces,
+        destination,
+        vibes,
+        freeText,
+        results: [],
+        status: 'pending',
+        initiatedAt: now,
+        timestamp: now,
+      },
+    })
+  );
+}
+
+/**
+ * Mark search as failed with error details
+ */
+export async function markSearchAsFailed(
+  userId: string,
+  searchId: string,
+  stage: 'rate_limit' | 'geocoding' | 'place_search' | 'ai_analysis' | 'unknown',
+  message: string
+): Promise<void> {
+  const now = new Date().toISOString();
+  await updateSearchState(userId, searchId, {
+    status: 'failed',
+    completedAt: now,
+    error: {
+      stage,
+      message,
+      timestamp: now,
+    },
+  });
+}
+
+/**
+ * Mark search as successful and save results
+ */
+export async function markSearchAsSuccessful(
+  userId: string,
+  searchId: string,
+  results: SearchHistoryItem['results'],
+  allResults?: SearchHistoryItem['allResults'],
+  hasMorePages?: boolean,
+  nextPageToken?: string
+): Promise<void> {
+  const now = new Date().toISOString();
+  const updates: Partial<SearchHistoryItem> = {
+    status: 'success',
+    completedAt: now,
+    results,
+    allResults,
+    shownPlaceIds: results.map(r => r.placeId),
+    currentPage: 0,
+    hasMorePages: hasMorePages || false,
+  };
+
+  if (nextPageToken) {
+    updates.nextPageToken = nextPageToken;
+  }
+
+  await updateSearchState(userId, searchId, updates);
 }
 
 export async function saveSearchHistory(history: SearchHistoryItem): Promise<void> {
