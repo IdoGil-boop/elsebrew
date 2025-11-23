@@ -29,6 +29,13 @@ frontend:
           if [ -n "$LLM_API_URL" ]; then
             echo "LLM_API_URL=$LLM_API_URL" >> .env.production
           fi
+          # Rate limiting variables
+          if [ -n "$RATE_LIMIT_MAX_SEARCHES" ]; then
+            echo "RATE_LIMIT_MAX_SEARCHES=$RATE_LIMIT_MAX_SEARCHES" >> .env.production
+          fi
+          if [ -n "$RATE_LIMIT_WINDOW_HOURS" ]; then
+            echo "RATE_LIMIT_WINDOW_HOURS=$RATE_LIMIT_WINDOW_HOURS" >> .env.production
+          fi
           # Other variables that need to be available at runtime
           if [ -n "$NEXT_PUBLIC_GA4_MEASUREMENT_ID" ]; then
             echo "NEXT_PUBLIC_GA4_MEASUREMENT_ID=$NEXT_PUBLIC_GA4_MEASUREMENT_ID" >> .env.production
