@@ -30,14 +30,23 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    // Get existing user to preserve createdAt if it exists
+    const existingUser = await getUser(auth.user.sub);
+    const now = new Date().toISOString();
+
     const userProfile: UserProfile = {
       userId: auth.user.sub,
       email: auth.user.email,
       name: auth.user.name,
       picture: auth.user.picture,
-      createdAt: body.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      preferences: body.preferences,
+      // Use fields from JWT (auth.user) if available, otherwise from body
+      emailVerified: auth.user.email_verified ?? body.emailVerified ?? existingUser?.emailVerified ?? undefined,
+      givenName: auth.user.given_name ?? body.givenName ?? existingUser?.givenName ?? undefined,
+      familyName: auth.user.family_name ?? body.familyName ?? existingUser?.familyName ?? undefined,
+      locale: auth.user.locale ?? body.locale ?? existingUser?.locale ?? undefined,
+      createdAt: existingUser?.createdAt || body.createdAt || now,
+      updatedAt: now,
+      preferences: body.preferences || existingUser?.preferences,
     };
 
     await createOrUpdateUser(userProfile);

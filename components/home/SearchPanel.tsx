@@ -7,7 +7,7 @@ import { loadGoogleMaps } from '@/lib/maps-loader';
 import { VibeToggles } from '@/types';
 import { analytics } from '@/lib/analytics';
 import Toast from '@/components/shared/Toast';
-import { getAuthToken } from '@/lib/storage';
+import { getAuthToken, storage } from '@/lib/storage';
 
 export default function SearchPanel() {
   const router = useRouter();
@@ -37,36 +37,27 @@ export default function SearchPanel() {
   });
 
   useEffect(() => {
+    // Restore cached form state
+    const cachedState = storage.getSearchFormState();
+    if (cachedState) {
+      setFreeText(cachedState.freeText || '');
+      setVibes(cachedState.vibes || {
+        roastery: false,
+        lightRoast: false,
+        laptopFriendly: false,
+        nightOwl: false,
+        cozy: false,
+        minimalist: false,
+        allowsDogs: false,
+        servesVegetarian: false,
+        brunch: false,
+      });
+    }
+
     const initAutocomplete = async () => {
       const google = await loadGoogleMaps();
 
-      if (sourceInputRef.current) {
-        const sourceAutocomplete = new google.maps.places.Autocomplete(
-          sourceInputRef.current,
-          {
-            types: ['establishment'],
-            fields: ['place_id', 'name', 'geometry', 'formatted_address', 'types', 'rating', 'user_ratings_total', 'price_level', 'opening_hours', 'photos', 'editorial_summary'],
-          }
-        );
-
-        sourceAutocomplete.addListener('place_changed', () => {
-          const place = sourceAutocomplete.getPlace();
-          if (place && place.place_id) {
-            // Add to list if not already present
-            setSourcePlaces(prev => {
-              const exists = prev.some(p => p.place_id === place.place_id);
-              if (exists) return prev;
-              return [...prev, place];
-            });
-            // Clear input for next entry
-            if (sourceInputRef.current) {
-              sourceInputRef.current.value = '';
-            }
-            setCurrentSourceInput('');
-          }
-        });
-      }
-
+      // Initialize destination autocomplete first (matches DOM order)
       if (destInputRef.current) {
         // Use types: ['(regions)'] which includes cities, neighborhoods, and addresses but not countries
         // Combined with types: ['establishment'] for specific businesses like hotels
@@ -80,6 +71,20 @@ export default function SearchPanel() {
           destInputRef.current,
           autocompleteOptions
         );
+
+        // Restore destination place if cached (after autocomplete is created)
+        if (cachedState?.destPlace && destInputRef.current) {
+          // Set the input value
+          destInputRef.current.value = cachedState.destPlace.name;
+          
+          // Create a minimal place object for the cached destination
+          const cachedDestPlace: google.maps.places.PlaceResult = {
+            place_id: cachedState.destPlace.place_id,
+            name: cachedState.destPlace.name,
+            formatted_address: cachedState.destPlace.formatted_address,
+          } as google.maps.places.PlaceResult;
+          setDestPlace(cachedDestPlace);
+        }
 
         destAutocomplete.addListener('place_changed', () => {
           const place = destAutocomplete.getPlace();
@@ -100,6 +105,44 @@ export default function SearchPanel() {
           }
 
           setDestPlace(place);
+        });
+      }
+
+      // Initialize source (favorite places) autocomplete second
+      if (sourceInputRef.current) {
+        const sourceAutocomplete = new google.maps.places.Autocomplete(
+          sourceInputRef.current,
+          {
+            types: ['establishment'],
+            fields: ['place_id', 'name', 'geometry', 'formatted_address', 'types', 'rating', 'user_ratings_total', 'price_level', 'opening_hours', 'photos', 'editorial_summary'],
+          }
+        );
+
+        // Restore source places if cached
+        if (cachedState?.sourcePlaces && cachedState.sourcePlaces.length > 0) {
+          const restoredPlaces: google.maps.places.PlaceResult[] = cachedState.sourcePlaces.map(sp => ({
+            place_id: sp.place_id,
+            name: sp.name,
+            formatted_address: sp.formatted_address,
+          } as google.maps.places.PlaceResult));
+          setSourcePlaces(restoredPlaces);
+        }
+
+        sourceAutocomplete.addListener('place_changed', () => {
+          const place = sourceAutocomplete.getPlace();
+          if (place && place.place_id) {
+            // Add to list if not already present
+            setSourcePlaces(prev => {
+              const exists = prev.some(p => p.place_id === place.place_id);
+              if (exists) return prev;
+              return [...prev, place];
+            });
+            // Clear input for next entry
+            if (sourceInputRef.current) {
+              sourceInputRef.current.value = '';
+            }
+            setCurrentSourceInput('');
+          }
         });
       }
     };
@@ -130,6 +173,14 @@ export default function SearchPanel() {
   const handleSearch = async () => {
     if (sourcePlaces.length === 0 || !destPlace || !destPlace.name) {
       alert('Please select at least one source café and a destination city');
+      return;
+    }
+
+    // Check if user is authenticated
+    const userProfile = storage.getUserProfile();
+    if (!userProfile || !userProfile.token) {
+      setToastMessage('☕️ Hey there! Please sign in with Google to start your search adventure. We\'d love to help you find your perfect café match! ✨');
+      setShowToast(true);
       return;
     }
 
@@ -200,6 +251,22 @@ export default function SearchPanel() {
       analytics.freeTextSearch({ has_text: true });
     }
 
+    // Cache form state before navigating
+    storage.setSearchFormState({
+      sourcePlaces: sourcePlaces.map(p => ({
+        place_id: p.place_id!,
+        name: p.name || '',
+        formatted_address: p.formatted_address,
+      })),
+      destPlace: destPlace ? {
+        place_id: destPlace.place_id!,
+        name: destPlace.name || '',
+        formatted_address: destPlace.formatted_address,
+      } : null,
+      freeText,
+      vibes,
+    });
+
     // Navigate to results with query params
     const params = new URLSearchParams({
       sourcePlaceIds: JSON.stringify(sourcePlaces.map(p => p.place_id)),
@@ -235,6 +302,23 @@ export default function SearchPanel() {
       className="card p-8 max-w-2xl mx-auto"
     >
       <div className="space-y-6">
+        {/* Destination */}
+        <div>
+          <label htmlFor="destination" className="block text-sm font-medium text-charcoal mb-2">
+            Where are you going?
+            <span className="text-xs text-gray-500 ml-2 font-normal">
+              Enter an area like a city or neighborhood, or a specific place like your hotel 
+            </span>
+          </label>
+          <input
+            ref={destInputRef}
+            id="destination"
+            type="text"
+            placeholder="e.g., Brooklyn, Times Square, Shibuya Hotel, etc."
+            className="input-field"
+          />
+        </div>
+
         {/* Source café(s) */}
         <div>
           <label htmlFor="source" className="block text-sm font-medium text-charcoal mb-2">
@@ -278,20 +362,6 @@ export default function SearchPanel() {
               ))}
             </div>
           )}
-        </div>
-
-        {/* Destination */}
-        <div>
-          <label htmlFor="destination" className="block text-sm font-medium text-charcoal mb-2">
-            Where are you going?
-          </label>
-          <input
-            ref={destInputRef}
-            id="destination"
-            type="text"
-            placeholder="e.g., Brooklyn, Times Square, Shibuya Hotel, etc."
-            className="input-field"
-          />
         </div>
 
         {/* Vibe preferences dropdown */}

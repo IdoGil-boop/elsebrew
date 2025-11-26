@@ -1,10 +1,11 @@
-import { SavedCafe, UserProfile } from '@/types';
+import { SavedCafe, UserProfile, VibeToggles } from '@/types';
 
 const STORAGE_KEYS = {
   USER_PROFILE: 'elsebrew_user_profile',
   SAVED_CAFES: 'elsebrew_saved_cafes',
   NAVIGATION_STATE: 'elsebrew_navigation_state',
   RESULTS_STATE: 'elsebrew_results_state',
+  SEARCH_FORM_STATE: 'elsebrew_search_form_state',
 };
 
 export const storage = {
@@ -180,6 +181,36 @@ export const storage = {
           console.warn('[Storage] Error getting photo URL:', error);
         }
 
+        // Extract location coordinates if available
+        let location: { lat: number; lng: number } | undefined;
+        if (r.place.location) {
+          console.log('[Storage] Saving location for place:', r.place.id, {
+            hasLocation: !!r.place.location,
+            locationType: typeof r.place.location,
+            latType: typeof (r.place.location as any).lat,
+            locationValue: r.place.location,
+          });
+          if (typeof r.place.location.lat === 'function') {
+            // google.maps.LatLng object
+            location = {
+              lat: r.place.location.lat(),
+              lng: r.place.location.lng(),
+            };
+            console.log('[Storage] Extracted location from LatLng:', location);
+          } else if (typeof r.place.location.lat === 'number') {
+            // Already a plain object
+            location = {
+              lat: r.place.location.lat,
+              lng: r.place.location.lng,
+            };
+            console.log('[Storage] Using plain location object:', location);
+          } else {
+            console.warn('[Storage] Unknown location format:', r.place.location);
+          }
+        } else {
+          console.warn('[Storage] No location for place:', r.place.id);
+        }
+
         return {
           place: {
             id: r.place.id,
@@ -191,6 +222,7 @@ export const storage = {
             types: r.place.types,
             editorialSummary: r.place.editorialSummary,
             photoUrl,
+            location, // Save location coordinates
           },
           score: r.score,
           reasoning: r.reasoning,
@@ -208,6 +240,38 @@ export const storage = {
       sessionStorage.removeItem(STORAGE_KEYS.RESULTS_STATE);
     }
   },
+
+  // Search form state (for restoring form inputs)
+  getSearchFormState: (): {
+    sourcePlaces: Array<{ place_id: string; name: string; formatted_address?: string }>;
+    destPlace: { place_id: string; name: string; formatted_address?: string } | null;
+    freeText: string;
+    vibes: VibeToggles;
+  } | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.SEARCH_FORM_STATE);
+      return data ? JSON.parse(data) : null;
+    } catch (error) {
+      console.error('[Storage] Error parsing search form state:', error);
+      localStorage.removeItem(STORAGE_KEYS.SEARCH_FORM_STATE);
+      return null;
+    }
+  },
+
+  setSearchFormState: (state: {
+    sourcePlaces: Array<{ place_id: string; name: string; formatted_address?: string }>;
+    destPlace: { place_id: string; name: string; formatted_address?: string } | null;
+    freeText: string;
+    vibes: VibeToggles;
+  } | null) => {
+    if (typeof window === 'undefined') return;
+    if (state) {
+      localStorage.setItem(STORAGE_KEYS.SEARCH_FORM_STATE, JSON.stringify(state));
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.SEARCH_FORM_STATE);
+    }
+  },
 };
 
 /**
@@ -216,4 +280,67 @@ export const storage = {
 export const getAuthToken = (): string | null => {
   const profile = storage.getUserProfile();
   return profile?.token || null;
+};
+
+/**
+ * Check if a JWT token is expired
+ * Returns true if token is expired (beyond the 24-hour grace period)
+ */
+export const isTokenExpired = (token: string): boolean => {
+  try {
+    // Decode JWT token (base64url decode)
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      return true; // Invalid token format
+    }
+
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+
+    const decoded = JSON.parse(jsonPayload);
+    const exp = decoded.exp;
+
+    if (!exp) {
+      return true; // No expiration claim
+    }
+
+    const expirationTime = exp * 1000;
+    const now = Date.now();
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+
+    // Token is expired if it's more than 24 hours past expiration
+    return now >= expirationTime + twentyFourHours;
+  } catch (error) {
+    console.error('[Storage] Error checking token expiration:', error);
+    return true; // If we can't decode, consider it expired
+  }
+};
+
+/**
+ * Check and clear user profile if token is expired
+ * Returns true if user was logged out, false otherwise
+ */
+export const checkAndClearExpiredToken = (): boolean => {
+  const profile = storage.getUserProfile();
+  if (!profile || !profile.token) {
+    return false;
+  }
+
+  if (isTokenExpired(profile.token)) {
+    console.log('[Storage] Token expired - logging out user');
+    storage.setUserProfile(null);
+    // Dispatch event for other components
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('elsebrew_auth_change'));
+    }
+    return true;
+  }
+
+  return false;
 };

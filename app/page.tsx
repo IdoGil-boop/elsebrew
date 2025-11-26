@@ -8,9 +8,13 @@ import EmailSignup from '@/components/home/EmailSignup';
 // import PricingStrip from '@/components/home/PricingStrip';
 import TypingTitle from '@/components/home/TypingTitle';
 import { analytics } from '@/lib/analytics';
+import { checkAndClearExpiredToken } from '@/lib/storage';
 
 export default function Home() {
   useEffect(() => {
+    // Check if token is expired and log out if needed
+    checkAndClearExpiredToken();
+    
     analytics.viewHome();
   }, []);
 

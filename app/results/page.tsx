@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { CafeMatch, PlaceBasicInfo, VibeToggles, normalizeVibes } from '@/types';
@@ -47,6 +47,16 @@ function ResultsContent() {
   const lastExecutedSearchParams = useRef<string>('');
   // Ref to preserve results when modifying search from results page
   const preservedResultsRef = useRef<CafeMatch[]>([]);
+
+  // Create stable identifier for search params that only changes when actual values change
+  // Normalize by removing refineSearch param (which is just a UI flag)
+  const searchParamsKey = useMemo(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('refineSearch');
+    // Sort params for consistent key generation
+    const sortedParams = Array.from(params.entries()).sort(([a], [b]) => a.localeCompare(b));
+    return JSON.stringify(sortedParams);
+  }, [searchParams]);
 
   // Helper to get photo URL from new or legacy Google Places API
   const getPhotoUrl = (photo: any, maxWidth: number): string | undefined => {
@@ -109,25 +119,51 @@ function ResultsContent() {
 
     if (!isRefinement && savedState && savedState.searchParams === currentSearch && savedState.results) {
       // Restore cached results immediately
-      const restoredResults: CafeMatch[] = savedState.results.map((r: any) => ({
-        place: {
-          id: r.place.id,
-          displayName: r.place.displayName,
-          formattedAddress: r.place.formattedAddress,
-          rating: r.place.rating,
-          userRatingCount: r.place.userRatingCount,
-          priceLevel: r.place.priceLevel,
-          types: r.place.types,
-          primaryType: r.place.primaryType,
-          editorialSummary: r.place.editorialSummary,
-          photoUrl: r.place.photoUrl, // Include cached photo URL
-        } as PlaceBasicInfo,
-        score: r.score,
-        reasoning: r.reasoning,
-        matchedKeywords: r.matchedKeywords,
-        distanceToCenter: r.distanceToCenter,
-        imageAnalysis: r.imageAnalysis,
-      }));
+      console.log('[Results] Restoring from cache:', {
+        resultCount: savedState.results.length,
+        firstResult: savedState.results[0],
+      });
+      const restoredResults: CafeMatch[] = savedState.results.map((r: any) => {
+        // Restore location if available
+        let location: google.maps.LatLng | undefined;
+        if (r.place.location && r.place.location.lat && r.place.location.lng) {
+          console.log('[Results] Restoring location for place:', r.place.id, r.place.location);
+          // We'll need to create the LatLng object after Google Maps loads
+          // For now, store the coordinates
+          location = r.place.location as any; // Will be converted to LatLng in map component
+        } else {
+          console.warn('[Results] No location in cached result for place:', r.place.id, {
+            hasLocation: !!r.place.location,
+            location: r.place.location,
+          });
+        }
+
+        return {
+          place: {
+            id: r.place.id,
+            displayName: r.place.displayName,
+            formattedAddress: r.place.formattedAddress,
+            rating: r.place.rating,
+            userRatingCount: r.place.userRatingCount,
+            priceLevel: r.place.priceLevel,
+            types: r.place.types,
+            primaryType: r.place.primaryType,
+            editorialSummary: r.place.editorialSummary,
+            photoUrl: r.place.photoUrl, // Include cached photo URL
+            location, // Restore location coordinates
+          } as PlaceBasicInfo,
+          score: r.score,
+          reasoning: r.reasoning,
+          matchedKeywords: r.matchedKeywords,
+          distanceToCenter: r.distanceToCenter,
+          imageAnalysis: r.imageAnalysis,
+        };
+      });
+      console.log('[Results] Restored results with locations:', restoredResults.map(r => ({
+        id: r.place.id,
+        hasLocation: !!r.place.location,
+        location: r.place.location,
+      })));
       setResults(restoredResults);
       // Preserve restored results for future refinements
       preservedResultsRef.current = [...restoredResults];
@@ -159,25 +195,49 @@ function ResultsContent() {
       } else {
         // No results and nothing preserved - try to get from savedState
         if (savedState && savedState.results && savedState.results.length > 0) {
-          const restoredResults: CafeMatch[] = savedState.results.map((r: any) => ({
-            place: {
-              id: r.place.id,
-              displayName: r.place.displayName,
-              formattedAddress: r.place.formattedAddress,
-              rating: r.place.rating,
-              userRatingCount: r.place.userRatingCount,
-              priceLevel: r.place.priceLevel,
-              types: r.place.types,
-              primaryType: r.place.primaryType,
-              editorialSummary: r.place.editorialSummary,
-              photoUrl: r.place.photoUrl,
-            } as PlaceBasicInfo,
-            score: r.score,
-            reasoning: r.reasoning,
-            matchedKeywords: r.matchedKeywords,
-            distanceToCenter: r.distanceToCenter,
-            imageAnalysis: r.imageAnalysis,
-          }));
+          console.log('[Results] Restoring from savedState for refinement:', {
+            resultCount: savedState.results.length,
+            firstResult: savedState.results[0],
+          });
+          const restoredResults: CafeMatch[] = savedState.results.map((r: any) => {
+            // Restore location if available
+            let location: google.maps.LatLng | undefined;
+            if (r.place.location && r.place.location.lat && r.place.location.lng) {
+              console.log('[Results] Restoring location for refinement place:', r.place.id, r.place.location);
+              location = r.place.location as any; // Will be converted to LatLng in map component
+            } else {
+              console.warn('[Results] No location in cached result for refinement place:', r.place.id, {
+                hasLocation: !!r.place.location,
+                location: r.place.location,
+              });
+            }
+
+            return {
+              place: {
+                id: r.place.id,
+                displayName: r.place.displayName,
+                formattedAddress: r.place.formattedAddress,
+                rating: r.place.rating,
+                userRatingCount: r.place.userRatingCount,
+                priceLevel: r.place.priceLevel,
+                types: r.place.types,
+                primaryType: r.place.primaryType,
+                editorialSummary: r.place.editorialSummary,
+                photoUrl: r.place.photoUrl,
+                location, // Restore location coordinates
+              } as PlaceBasicInfo,
+              score: r.score,
+              reasoning: r.reasoning,
+              matchedKeywords: r.matchedKeywords,
+              distanceToCenter: r.distanceToCenter,
+              imageAnalysis: r.imageAnalysis,
+            };
+          });
+          console.log('[Results] Restored refinement results with locations:', restoredResults.map(r => ({
+            id: r.place.id,
+            hasLocation: !!r.place.location,
+            location: r.place.location,
+          })));
           setResults(restoredResults);
           preservedResultsRef.current = [...restoredResults];
           console.log('[Results] Restored results from savedState for refinement:', restoredResults.length);
@@ -952,7 +1012,7 @@ function ResultsContent() {
         isSearchInProgress.current = false;
       }
     };
-  }, [searchParams]);
+  }, [searchParamsKey]);
 
   const handleSelectResult = (result: CafeMatch, index: number) => {
     setSelectedResult(result);
@@ -1200,7 +1260,7 @@ function ResultsContent() {
                 className="btn-secondary text-xs sm:text-sm px-3 sm:px-6 py-2 sm:py-3 flex-1 sm:flex-none whitespace-nowrap"
               >
                 <span className="hidden sm:inline">I missed your vibe?</span>
-                <span className="sm:hidden">Missed vibe?</span>
+                <span className="sm:hidden">Wrong Vibe?</span>
               </button>
               <button
                 onClick={handleSaveAll}

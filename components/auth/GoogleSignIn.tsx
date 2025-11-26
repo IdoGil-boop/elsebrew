@@ -73,6 +73,38 @@ export default function GoogleSignIn({ onSignIn }: GoogleSignInProps) {
     // Store in localStorage
     storage.setUserProfile(userProfile);
 
+    // Save all available user information to DynamoDB
+    fetch('/api/user/profile', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${response.credential}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        emailVerified: userData.email_verified,
+        givenName: userData.given_name,
+        familyName: userData.family_name,
+        locale: userData.locale,
+        createdAt: new Date().toISOString(),
+      }),
+    })
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`Failed to save user profile: ${res.statusText}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        console.log('[GoogleSignIn] User profile saved to DynamoDB', {
+          userId: data.user?.userId,
+          email: data.user?.email,
+        });
+      })
+      .catch(err => {
+        console.error('[GoogleSignIn] Failed to save user profile to DynamoDB:', err);
+        // Don't block the sign-in flow if DynamoDB save fails
+      });
+
     // Verify it was saved
     const savedProfile = storage.getUserProfile();
     console.log('[GoogleSignIn] Profile saved to localStorage', {

@@ -149,6 +149,10 @@ export interface UserProfile {
   email: string;
   name: string;
   picture?: string;
+  emailVerified?: boolean;
+  givenName?: string;
+  familyName?: string;
+  locale?: string;
   createdAt: string;
   updatedAt: string;
   preferences?: {

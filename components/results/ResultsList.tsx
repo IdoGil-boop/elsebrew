@@ -64,6 +64,137 @@ export default function ResultsList({
     return '$'.repeat(level);
   };
 
+  const handleToggleSave = async (e: React.MouseEvent, place: CafeMatch['place'], photoUrl: string | null) => {
+    e.stopPropagation(); // Prevent card click
+    
+    const isCurrentlySaved = savedPlaceIds.has(place.id);
+    const userProfile = storage.getUserProfile();
+
+    // Optimistic update - change UI immediately
+    if (isCurrentlySaved) {
+      setSavedPlaceIds(prev => {
+        const next = new Set(prev);
+        next.delete(place.id);
+        return next;
+      });
+    } else {
+      setSavedPlaceIds(prev => new Set(prev).add(place.id));
+    }
+
+    // Then handle the actual save/unsave in the background
+    if (isCurrentlySaved) {
+      // Unsave
+      storage.removeSavedCafe(place.id);
+      
+      // Also remove from API if logged in
+      if (userProfile?.token) {
+        try {
+          const response = await fetch(`/api/user/saved-places?placeId=${place.id}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${userProfile.token}`,
+            },
+          });
+
+          if (response.status === 401) {
+            storage.setUserProfile(null);
+          } else if (!response.ok) {
+            // Revert on failure
+            setSavedPlaceIds(prev => new Set(prev).add(place.id));
+            // Restore to localStorage
+            storage.saveCafe({
+              placeId: place.id,
+              name: place.displayName,
+              savedAt: Date.now(),
+              photoUrl: photoUrl || undefined,
+              rating: place.rating,
+            });
+          }
+        } catch (error) {
+          console.error('Error deleting from API:', error);
+          // Revert on failure
+          setSavedPlaceIds(prev => new Set(prev).add(place.id));
+          // Restore to localStorage
+          storage.saveCafe({
+            placeId: place.id,
+            name: place.displayName,
+            savedAt: Date.now(),
+            photoUrl: photoUrl || undefined,
+            rating: place.rating,
+          });
+        }
+      }
+    } else {
+      // Save
+      let saveSuccess = false;
+      
+      if (userProfile?.token) {
+        try {
+          const response = await fetch('/api/user/saved-places', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${userProfile.token}`,
+            },
+            body: JSON.stringify({
+              placeId: place.id,
+              name: place.displayName,
+              address: place.formattedAddress || '',
+              rating: place.rating,
+              priceLevel: place.priceLevel,
+              photoUrl: photoUrl || undefined,
+            }),
+          });
+
+          if (response.status === 401) {
+            storage.setUserProfile(null);
+            // Continue with localStorage fallback
+          } else if (response.ok) {
+            saveSuccess = true;
+            const data = await response.json();
+            if (data.localStorage) {
+              storage.saveCafe({
+                placeId: place.id,
+                name: place.displayName,
+                savedAt: Date.now(),
+                photoUrl: photoUrl || undefined,
+                rating: place.rating,
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error saving place:', error);
+          // Continue with localStorage fallback
+        }
+      }
+      
+      // Save to localStorage (either as fallback or primary for anonymous users)
+      try {
+        storage.saveCafe({
+          placeId: place.id,
+          name: place.displayName,
+          savedAt: Date.now(),
+          photoUrl: photoUrl || undefined,
+          rating: place.rating,
+        });
+        saveSuccess = true;
+      } catch (error) {
+        console.error('Error saving to localStorage:', error);
+      }
+
+      // Revert if save failed
+      if (!saveSuccess) {
+        setSavedPlaceIds(prev => {
+          const next = new Set(prev);
+          next.delete(place.id);
+          return next;
+        });
+      } else {
+        analytics.resultSaveGoogle(place.id);
+      }
+    }
+  };
+
   return (
     <div className="space-y-3 sm:space-y-4 overflow-y-auto overflow-x-visible h-full px-3 sm:px-6 py-3 sm:py-6">
       {results.map((result, index) => {
@@ -110,13 +241,6 @@ export default function ResultsList({
                     <h3 className="font-semibold text-base sm:text-lg truncate">
                       {index + 1}. {result.place.displayName}
                     </h3>
-                    {savedPlaceIds.has(result.place.id) && (
-                      <span className="flex-shrink-0 text-espresso" title="Saved">
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-                        </svg>
-                      </span>
-                    )}
                   </div>
                   <div className="flex items-center space-x-2 flex-shrink-0">
                     {result.place.rating && (
@@ -125,12 +249,27 @@ export default function ResultsList({
                         <span className="text-sm font-medium">{result.place.rating.toFixed(1)}</span>
                       </div>
                     )}
+                    <button
+                      onClick={(e) => handleToggleSave(e, result.place, photoUrl)}
+                      className="flex-shrink-0 text-espresso hover:opacity-80 transition-opacity"
+                      title={savedPlaceIds.has(result.place.id) ? 'Unsave' : 'Save'}
+                    >
+                      {savedPlaceIds.has(result.place.id) ? (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                        </svg>
+                      )}
+                    </button>
                   </div>
                 </div>
 
                 {/* Tags */}
                 <div className="flex flex-wrap gap-2 mb-2">
-                  {result.place.priceLevel && (
+                {getPriceLevel(result.place.priceLevel) && (
                     <span className="text-xs px-2 py-1 bg-gray-100 rounded-full">
                       {getPriceLevel(result.place.priceLevel)}
                     </span>
