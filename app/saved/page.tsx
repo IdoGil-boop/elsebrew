@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import { SavedCafe, UserProfile, CafeMatch, PlaceBasicInfo } from '@/types';
 import { storage } from '@/lib/storage';
 import { analytics } from '@/lib/analytics';
@@ -423,7 +424,9 @@ export default function SavedPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
           <div className="bg-white rounded-lg p-6">
             <div className="text-center">
-              <div className="text-4xl mb-4 animate-bounce">☕</div>
+              <div className="mb-4 animate-bounce">
+                <Image src="/images/logo.png" alt="Loading" width={64} height={64} className="w-16 h-16" />
+              </div>
               <div className="text-lg text-gray-600">Loading place details...</div>
             </div>
           </div>

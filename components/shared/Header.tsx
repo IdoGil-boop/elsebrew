@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState, useEffect, useRef } from 'react';
 import { storage } from '@/lib/storage';
 import { UserProfile } from '@/types';
@@ -77,14 +78,13 @@ export default function Header() {
   // Prevent hydration mismatch
   if (!isClient) {
     return (
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-50">
+      <header className="border-b border-gray-100 sticky top-0 z-50" style={{ backgroundColor: '#F6F6F6' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center space-x-2 group">
-              <div className="text-2xl transition-transform group-hover:scale-105">☕</div>
-              <span className="text-xl font-serif font-semibold text-espresso">
-                Elsebrew
-              </span>
+          <div className="flex items-center justify-between h-40">
+            <Link href="/" className="flex items-center group">
+              <div className="transition-transform group-hover:scale-105">
+                <Image src="/images/logo.png" alt="Elsebrew" width={160} height={160} className="w-40 h-40" />
+              </div>
             </Link>
             <nav className="flex items-center space-x-4"></nav>
           </div>
@@ -94,15 +94,14 @@ export default function Header() {
   }
 
   return (
-    <header className="bg-white border-b border-gray-100 sticky top-0 z-50">
+    <header className="border-b border-gray-100 sticky top-0 z-50" style={{ backgroundColor: '#F6F6F6' }}>
       <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
-        <div className="flex items-center justify-between h-14 sm:h-16">
+        <div className="flex items-center justify-between h-36 sm:h-40">
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-1 sm:space-x-2 group">
-            <div className="text-xl sm:text-2xl transition-transform group-hover:scale-105">☕</div>
-            <span className="text-lg sm:text-xl font-serif font-semibold text-espresso">
-              Elsebrew
-            </span>
+          <Link href="/" className="flex items-center group">
+            <div>
+              <Image src="/images/logo.png" alt="Elsebrew" width={144} height={144} className="w-36 h-36 sm:w-40 sm:h-40" />
+            </div>
           </Link>
 
           {/* Navigation */}

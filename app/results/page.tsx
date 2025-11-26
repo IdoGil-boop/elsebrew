@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import { CafeMatch, PlaceBasicInfo, VibeToggles, normalizeVibes } from '@/types';
 import { loadGoogleMaps } from '@/lib/maps-loader';
 import { searchCafes, SearchCafesResult } from '@/lib/places-search';
@@ -1129,7 +1130,9 @@ function ResultsContent() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="text-4xl mb-4 animate-bounce">☕</div>
+          <div className="mb-4 animate-bounce">
+            <Image src="/images/logo.png" alt="Loading" width={64} height={64} className="w-16 h-16" />
+          </div>
           <div className="text-lg text-gray-600">Finding your café twins...</div>
         </div>
       </div>
@@ -1369,7 +1372,9 @@ export default function ResultsPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center">
-          <div className="text-4xl animate-bounce">☕</div>
+          <div className="animate-bounce">
+            <Image src="/images/logo.png" alt="Loading" width={64} height={64} className="w-16 h-16" />
+          </div>
         </div>
       }
     >
