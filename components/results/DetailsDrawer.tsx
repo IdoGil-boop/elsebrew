@@ -286,11 +286,10 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
           {/* Sticky close button - always visible */}
           <button
             onClick={onClose}
-            className="sticky top-4 right-4 ml-auto mr-4 mt-4 w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-colors z-10 border"
+            className="sticky top-4 right-4 ml-auto mr-4 mt-4 w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-colors z-10 border float-right"
             style={{ backgroundColor: '#FCF9F3', borderColor: '#E8DCC8' }}
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F5F1E8'}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FCF9F3'}
-            style={{ float: 'right' }}
           >
             ✕
           </button>
