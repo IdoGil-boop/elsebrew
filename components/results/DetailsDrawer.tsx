@@ -279,13 +279,17 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
           animate={{ y: 0 }}
           exit={{ y: '100%' }}
           transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-          className="bg-white rounded-t-2xl md:rounded-2xl w-full md:max-w-2xl max-h-[90vh] overflow-y-auto relative"
+          className="rounded-t-2xl md:rounded-2xl w-full md:max-w-2xl max-h-[90vh] overflow-y-auto relative"
+          style={{ backgroundColor: '#FCF9F3' }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Sticky close button - always visible */}
           <button
             onClick={onClose}
-            className="sticky top-4 right-4 ml-auto mr-4 mt-4 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-100 transition-colors z-10 border border-gray-200"
+            className="sticky top-4 right-4 ml-auto mr-4 mt-4 w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-colors z-10 border"
+            style={{ backgroundColor: '#FCF9F3', borderColor: '#E8DCC8' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F5F1E8'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FCF9F3'}
             style={{ float: 'right' }}
           >
             ✕
@@ -320,7 +324,10 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
                   {currentPhotoIndex > 0 && (
                     <button
                       onClick={goToPrevious}
-                      className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all z-20"
+                      className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-all z-20"
+                      style={{ backgroundColor: 'rgba(252, 249, 243, 0.9)' }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FCF9F3'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(252, 249, 243, 0.9)'}
                       aria-label="Previous photo"
                     >
                       <svg
@@ -341,7 +348,10 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
                   {currentPhotoIndex < photoUrls.length - 1 && (
                     <button
                       onClick={goToNext}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all z-20"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-all z-20"
+                      style={{ backgroundColor: 'rgba(252, 249, 243, 0.9)' }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FCF9F3'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(252, 249, 243, 0.9)'}
                       aria-label="Next photo"
                     >
                       <svg
@@ -371,9 +381,22 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
                       onClick={() => scrollToPhoto(index)}
                       className={`w-2 h-2 rounded-full transition-all ${
                         index === currentPhotoIndex
-                          ? 'bg-white w-6'
-                          : 'bg-white/50 hover:bg-white/75'
+                          ? 'w-6'
+                          : ''
                       }`}
+                      style={{
+                        backgroundColor: index === currentPhotoIndex ? '#FCF9F3' : 'rgba(252, 249, 243, 0.5)'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (index !== currentPhotoIndex) {
+                          e.currentTarget.style.backgroundColor = 'rgba(252, 249, 243, 0.75)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (index !== currentPhotoIndex) {
+                          e.currentTarget.style.backgroundColor = 'rgba(252, 249, 243, 0.5)';
+                        }
+                      }}
                       aria-label={`Go to photo ${index + 1}`}
                     />
                   ))}
@@ -382,7 +405,7 @@ export default function DetailsDrawer({ result, onClose }: DetailsDrawerProps) {
             </div>
           )}
 
-          <div className="p-4 sm:p-6 relative z-10 bg-white">
+          <div className="p-4 sm:p-6 relative z-10" style={{ backgroundColor: '#FCF9F3' }}>
 
             {/* Title and rating */}
             <div className="mb-4">

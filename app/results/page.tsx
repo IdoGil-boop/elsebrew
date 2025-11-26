@@ -1130,9 +1130,6 @@ function ResultsContent() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="mb-4 animate-bounce">
-            <Image src="/images/logo.png" alt="Loading" width={64} height={64} className="w-16 h-16" />
-          </div>
           <div className="text-lg text-gray-600">Finding your café twins...</div>
         </div>
       </div>
@@ -1210,7 +1207,7 @@ function ResultsContent() {
     <>
       <div className="min-h-screen flex flex-col">
         {/* Header - Sticky */}
-        <div className="bg-white border-b border-gray-100 px-3 sm:px-6 py-3 sm:py-4 flex-shrink-0 sticky top-14 sm:top-16 z-40">
+        <div className="border-b px-3 sm:px-6 py-3 sm:py-4 flex-shrink-0 sticky top-14 sm:top-16 z-40" style={{ backgroundColor: '#F9F7F2', borderColor: '#E8DCC8' }}>
           <div className="max-w-7xl mx-auto">
             {/* Top row - Back button and title */}
             <div className="flex items-center gap-2 sm:gap-4 mb-3 sm:mb-0">
@@ -1238,7 +1235,7 @@ function ResultsContent() {
                 </div>
                 <span className="hidden sm:inline">New search</span>
               </button>
-              <div className="h-4 sm:h-6 w-px bg-gray-200"></div>
+              <div className="h-4 sm:h-6 w-px" style={{ backgroundColor: '#E8DCC8' }}></div>
               <div className="flex-1 min-w-0">
                 <h1 className="text-base sm:text-xl font-semibold truncate">
                   {results.length} café{results.length !== 1 ? 's' : ''} found
@@ -1372,9 +1369,7 @@ export default function ResultsPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-bounce">
-            <Image src="/images/logo.png" alt="Loading" width={64} height={64} className="w-16 h-16" />
-          </div>
+          <div className="text-lg text-gray-600">Loading...</div>
         </div>
       }
     >

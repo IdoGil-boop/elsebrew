@@ -312,7 +312,7 @@ export default function SavedPage() {
   return (
     <div className="h-screen flex flex-col">
       {/* Sticky header */}
-      <div className="bg-white border-b border-gray-100 px-3 sm:px-6 py-3 sm:py-4 flex-shrink-0 sticky top-14 sm:top-16 z-40">
+      <div className="border-b px-3 sm:px-6 py-3 sm:py-4 flex-shrink-0 sticky top-14 sm:top-16 z-40" style={{ backgroundColor: '#F9F7F2', borderColor: '#E8DCC8' }}>
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-2 sm:gap-4 mb-2">
             <button
@@ -342,7 +342,7 @@ export default function SavedPage() {
                 return navState?.previousRoute === '/results' ? 'Back to results' : 'Back to search';
               })()}
             </button>
-            <div className="h-4 sm:h-6 w-px bg-gray-200"></div>
+            <div className="h-4 sm:h-6 w-px" style={{ backgroundColor: '#E8DCC8' }}></div>
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl sm:text-4xl font-serif font-bold truncate">Saved cafés</h1>
             </div>
@@ -369,7 +369,7 @@ export default function SavedPage() {
                 <div className="flex gap-4 sm:gap-6">
                   {/* Photo */}
                   {cafe.photoUrl && (
-                    <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100">
+                    <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl overflow-hidden flex-shrink-0" style={{ backgroundColor: '#F5F1E8' }}>
                       <img
                         src={cafe.photoUrl}
                         alt={cafe.name}
@@ -425,7 +425,7 @@ export default function SavedPage() {
           <div className="bg-white rounded-lg p-6">
             <div className="text-center">
               <div className="mb-4 animate-bounce">
-                <Image src="/images/logo.png" alt="Loading" width={64} height={64} className="w-16 h-16" />
+                <Image src="/images/logo.png" alt="Loading" width={64} height={64} className="w-16 h-16" style={{ maskImage: 'radial-gradient(ellipse 80% 80% at center, black 60%, transparent 100%)', WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at center, black 60%, transparent 100%)' }} />
               </div>
               <div className="text-lg text-gray-600">Loading place details...</div>
             </div>

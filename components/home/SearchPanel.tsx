@@ -393,18 +393,23 @@ export default function SearchPanel() {
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="absolute z-10 w-full mt-2 bg-white rounded-xl shadow-lg border border-gray-200 p-2"
+              className="absolute z-10 w-full mt-2 rounded-xl shadow-lg border p-2"
+              style={{ backgroundColor: '#FCF9F3', borderColor: '#E8DCC8' }}
             >
               {vibeOptions.map(({ key, label }) => (
                 <label
                   key={key}
-                  className="flex items-center px-3 py-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors"
+                  className="flex items-center px-3 py-2 rounded-lg cursor-pointer transition-colors"
+                  style={{ backgroundColor: 'transparent' }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F5F1E8'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
                   <input
                     type="checkbox"
                     checked={vibes[key]}
                     onChange={() => toggleVibe(key)}
-                    className="w-4 h-4 text-espresso border-gray-300 rounded focus:ring-espresso focus:ring-2"
+                    className="w-4 h-4 text-espresso rounded focus:ring-espresso focus:ring-2"
+                    style={{ borderColor: '#E8DCC8' }}
                   />
                   <span className="ml-3 text-sm text-charcoal">{label}</span>
                 </label>
