@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 interface ToastProps {
-  message: string;
+  message: string | ReactNode;
   type?: ToastType;
   isVisible: boolean;
   onClose: () => void;
@@ -67,7 +68,15 @@ export default function Toast({
           <div
             className={`${styles.bg} ${styles.border} border rounded-xl shadow-lg p-4 flex items-start gap-3`}
           >
-            <div className="text-xl flex-shrink-0">{styles.icon}</div>
+            <div className="flex-shrink-0 flex items-center border-gray border-2 p-0">
+              <Image 
+                src="/images/toast.png" 
+                alt="Toast" 
+                width={128} 
+                height={128} 
+                className="w-32 h-32"
+              />
+            </div>
             <div className="flex-1">
               <p className="text-sm text-gray-800">{message}</p>
             </div>

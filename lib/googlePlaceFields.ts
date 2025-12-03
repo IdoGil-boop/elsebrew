@@ -1,3 +1,5 @@
+import { getVibeFieldsToFetch } from './vibes';
+
 export const ADVANCED_PLACE_FIELDS = [
   'outdoorSeating',
   'takeout',
@@ -15,6 +17,7 @@ export const ADVANCED_PLACE_FIELDS = [
   'servesDinner',
   'servesBeer',
   'servesWine',
+  'servesCocktails',
   'servesVegetarianFood',
   'allowsDogs',
   'restroom',
@@ -33,6 +36,7 @@ export const ADVANCED_PLACE_FIELD_MASK = ADVANCED_PLACE_FIELDS.join(',');
 /**
  * Determine which Google API fields are relevant based on user query, vibes, and free text
  * This helps control costs by only fetching fields that are actually needed
+ * Updated to use the new dynamic vibe system (40+ vibes)
  */
 export function getRelevantFields(
   vibes: { [key: string]: boolean },
@@ -46,30 +50,9 @@ export function getRelevantFields(
   relevantFields.add('servesCoffee');
   relevantFields.add('outdoorSeating'); // Common preference
 
-  // Vibe-based field selection
-  if (vibes.brunch) {
-    relevantFields.add('servesBrunch');
-    relevantFields.add('servesBreakfast');
-  }
-
-  if (vibes.servesVegetarian) {
-    relevantFields.add('servesVegetarianFood');
-  }
-
-  if (vibes.allowsDogs) {
-    relevantFields.add('allowsDogs');
-  }
-
-  if (vibes.laptopFriendly) {
-    // Laptop-friendly might need restroom, good for groups
-    relevantFields.add('restroom');
-  }
-
-  if (vibes.nightOwl) {
-    relevantFields.add('servesDinner');
-    relevantFields.add('servesBeer');
-    relevantFields.add('servesWine');
-  }
+  // Get fields from selected vibes using the new vibe system
+  const vibeFields = getVibeFieldsToFetch(vibes);
+  vibeFields.forEach(field => relevantFields.add(field));
 
   // Query text analysis
   if (queryText.includes('dine') || queryText.includes('eat in') || queryText.includes('sit down')) {

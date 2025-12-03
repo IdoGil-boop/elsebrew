@@ -1,4 +1,5 @@
 import { PlaceBasicInfo, VibeToggles } from '@/types';
+import { getVibeById } from './vibes';
 
 /**
  * Calculate type overlap score between a candidate place and multiple origin places.
@@ -190,27 +191,38 @@ export const scoreCafe = (
   }
 
   // Vibe-based scoring - boost places that match selected vibes
-  if (vibes.allowsDogs && candidate.allowsDogs) {
-    score += 1.5;
-    matchedKeywords.push('Allows dogs');
-  }
+  // Updated to support dynamic vibes (40+ vibes instead of hardcoded)
+  Object.keys(vibes).forEach(vibeId => {
+    if (!vibes[vibeId]) return; // Skip unselected vibes
 
-  if (vibes.servesVegetarian && candidate.servesVegetarianFood) {
-    score += 1.5;
-    matchedKeywords.push('Serves vegetarian');
-  }
+    const vibeDef = getVibeById(vibeId);
+    if (!vibeDef?.googleField) return; // Skip vibes without Google field mapping
 
-  if (vibes.brunch && candidate.servesBrunch) {
-    score += 1.5;
-    matchedKeywords.push('Brunch');
-  }
+    const fieldValue = (candidate as any)[vibeDef.googleField];
+
+    // Boolean fields - check if true
+    if (typeof fieldValue === 'boolean' && fieldValue === true) {
+      score += 1.5;
+      matchedKeywords.push(vibeDef.label);
+    }
+
+    // Object fields (e.g., accessibilityOptions) - check if exists and has values
+    if (typeof fieldValue === 'object' && fieldValue !== null) {
+      const hasValues = Object.values(fieldValue).some(v => v === true || (v && typeof v === 'object'));
+      if (hasValues) {
+        score += 1.5;
+        matchedKeywords.push(vibeDef.label);
+      }
+    }
+  });
 
   // If this is a refinement, prioritize keywords from free text and vibes
   if (isRefinement) {
-    const editorialText = candidate.editorialSummary?.toLowerCase() || '';
+    // Use types and display name for keyword matching since editorialSummary is no longer fetched
     const typesText = candidate.types?.join(' ').toLowerCase() || '';
-    const combinedText = `${editorialText} ${typesText}`;
-    
+    const nameText = candidate.displayName?.toLowerCase() || '';
+    const combinedText = `${nameText} ${typesText}`;
+
     // Boost score for matching refinement keywords (from free text and vibes)
     keywords.forEach(keyword => {
       if (combinedText.includes(keyword.toLowerCase())) {

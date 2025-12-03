@@ -17,6 +17,24 @@ import Toast from '@/components/shared/Toast';
 import { getAuthToken, storage } from '@/lib/storage';
 import { generateSearchId, saveCompleteSearchState, initializeSearch, markSearchFailed, markSearchSuccessful } from '@/lib/search-state-manager';
 import { logger, suppressGoogleMapsWarnings } from '@/lib/logger';
+import { calculateDistance } from '@/lib/scoring';
+
+const AREA_TYPES = [
+  'locality',
+  'sublocality',
+  'administrative_area_level_1',
+  'administrative_area_level_2',
+  'country',
+  'sublocality_level_1',
+  'city',
+  'continent',
+  'postal_code',
+  'neighborhood',
+  'colloquial_area',
+];
+
+const MIN_DEST_RADIUS_METERS = 500; // Google Maps API minimum for searchByText
+const MAX_DEST_RADIUS_METERS = 50000;
 
 function ResultsContent() {
   const searchParams = useSearchParams();
@@ -31,6 +49,7 @@ function ResultsContent() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral>({ lat: 0, lng: 0 });
+  const [destinationCircle, setDestinationCircle] = useState<{ center: google.maps.LatLngLiteral; radius: number } | null>(null);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
   const [showToast, setShowToast] = useState(false);
@@ -171,6 +190,10 @@ function ResultsContent() {
       // Restore map center if available
       if (savedState.mapCenter) {
         setMapCenter(savedState.mapCenter);
+      }
+      // Restore destination circle if available
+      if (savedState.destinationCircle) {
+        setDestinationCircle(savedState.destinationCircle);
       }
       setIsLoading(false);
       // DON'T clear the saved state - keep it for future back/forward navigation
@@ -603,7 +626,6 @@ function ResultsContent() {
                     priceLevel: place.price_level,
                     regularOpeningHours: place.opening_hours,
                     photos: place.photos,
-                    editorialSummary: (place as any).editorial_summary?.overview,
                   });
                 } else {
                   logger.error('[Results] getPlaceDetails failed', {
@@ -671,11 +693,28 @@ function ResultsContent() {
         const destCenter = destGeometry.location;
         const destBounds = destGeometry.viewport;
         const destTypes = destResult.types || [];
+        const isAreaDestination = destTypes.some(type => AREA_TYPES.includes(type));
 
         setMapCenter({
           lat: destCenter.lat(),
           lng: destCenter.lng(),
         });
+
+        if (!isAreaDestination) {
+          let radiusMeters = MIN_DEST_RADIUS_METERS;
+          if (destBounds) {
+            const ne = destBounds.getNorthEast();
+            const sw = destBounds.getSouthWest();
+            const calculatedRadius = (calculateDistance(ne, sw) * 1000) / 2;
+            radiusMeters = Math.max(MIN_DEST_RADIUS_METERS, Math.min(calculatedRadius, MAX_DEST_RADIUS_METERS));
+          }
+          setDestinationCircle({
+            center: { lat: destCenter.lat(), lng: destCenter.lng() },
+            radius: Math.round(radiusMeters),
+          });
+        } else {
+          setDestinationCircle(null);
+        }
 
         // Extract keywords from multiple cafes and free text
         let customKeywords: string[] | undefined;
@@ -818,7 +857,6 @@ function ResultsContent() {
                 price_level: match.place.priceLevel,
                 rating: match.place.rating,
                 user_ratings_total: match.place.userRatingCount,
-                editorial_summary: match.place.editorialSummary,
                 keywords: match.matchedKeywords,
                 imageAnalysis: match.imageAnalysis,
                 typeOverlapDetails: match.typeOverlapDetails,
@@ -970,10 +1008,15 @@ function ResultsContent() {
         // Store results state for navigation back from saved page (only if not a refinement)
         if (!isRefinement) {
           const currentSearch = searchParams.toString();
-          storage.setResultsState(currentSearch, matchesWithReasoning, {
-            lat: destCenter.lat(),
-            lng: destCenter.lng(),
-          });
+          storage.setResultsState(
+            currentSearch,
+            matchesWithReasoning,
+            {
+              lat: destCenter.lat(),
+              lng: destCenter.lng(),
+            },
+            destinationCircle // Save destination circle for cache restoration
+          );
         }
 
         // Track results loaded
@@ -1320,6 +1363,7 @@ function ResultsContent() {
                   selectedIndex={selectedIndex}
                   hoveredIndex={hoveredIndex}
                   onMarkerClick={handleMarkerClick}
+                  destinationCircle={destinationCircle}
                 />
               </div>
             </div>

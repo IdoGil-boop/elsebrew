@@ -5,8 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { VibeToggles } from '@/types';
 import { useRouter } from 'next/navigation';
 import { analytics } from '@/lib/analytics';
-import { getAuthToken } from '@/lib/storage';
+import { getAuthToken, storage } from '@/lib/storage';
 import Toast from '@/components/shared/Toast';
+import { Lock } from 'lucide-react';
 
 interface RefineSearchModalProps {
   isOpen: boolean;
@@ -34,13 +35,25 @@ export default function RefineSearchModal({
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
   const [showToast, setShowToast] = useState(false);
+  const [isPremium, setIsPremium] = useState(false);
 
   useEffect(() => {
     setVibes(currentVibes);
     setFreeText(currentFreeText);
+
+    // Check if user is premium
+    const userProfile = storage.getUserProfile();
+    setIsPremium(userProfile?.subscription?.tier === 'premium');
   }, [currentVibes, currentFreeText, isOpen]);
 
   const toggleVibe = (key: keyof VibeToggles) => {
+    if (!isPremium) {
+      // Show upgrade message for free users
+      setToastMessage('Upgrade to Premium to unlock vibe filters and unlimited searches!');
+      setToastType('info');
+      setShowToast(true);
+      return;
+    }
     setVibes((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
@@ -226,21 +239,42 @@ export default function RefineSearchModal({
                 {/* Vibe preferences */}
                 <div>
                   <label className="block text-sm font-medium text-charcoal mb-3">
-                    Vibe Preferences
+                    Vibe Preferences {!isPremium && <span className="text-xs text-gray-500">(Premium feature)</span>}
                   </label>
-                  <div className="space-y-2">
+
+                  {/* Premium Banner for Free Users */}
+                  {!isPremium && (
+                    <div className="mb-3 p-3 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg">
+                      <div className="flex items-start gap-2">
+                        <Lock className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-xs text-amber-800">
+                            Unlock 40+ vibe filters with Premium ($5/month)
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className={`space-y-2 ${!isPremium ? 'opacity-60' : ''}`}>
                     {vibeOptions.map(({ key, label }) => (
                       <label
                         key={key}
-                        className="flex items-center px-3 py-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors"
+                        className={`flex items-center px-3 py-2 hover:bg-gray-50 rounded-lg transition-colors ${
+                          isPremium ? 'cursor-pointer' : 'cursor-not-allowed'
+                        }`}
                       >
                         <input
                           type="checkbox"
                           checked={vibes[key]}
                           onChange={() => toggleVibe(key)}
-                          className="w-4 h-4 text-espresso border-gray-300 rounded focus:ring-espresso focus:ring-2"
+                          disabled={!isPremium}
+                          className="w-4 h-4 text-espresso border-gray-300 rounded focus:ring-espresso focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
-                        <span className="ml-3 text-sm text-charcoal">{label}</span>
+                        <span className="ml-3 text-sm text-charcoal flex items-center gap-2">
+                          {label}
+                          {!isPremium && <Lock className="w-3 h-3 text-gray-400" />}
+                        </span>
                       </label>
                     ))}
                   </div>

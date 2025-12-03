@@ -30,6 +30,7 @@ export default function GoogleSignIn({ onSignIn }: GoogleSignInProps) {
     // Check if Google Accounts API is already loaded
     return typeof window !== 'undefined' && !!window.google?.accounts?.id;
   });
+  const [isPrompting, setIsPrompting] = useState(false);
   const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID;
 
   // Only log on client side
@@ -149,40 +150,92 @@ export default function GoogleSignIn({ onSignIn }: GoogleSignInProps) {
     analytics.clickSignIn();
   };
 
-  // Render the button when script is loaded and ref is available
+  // Initialize Google Sign-In when script is loaded
   useEffect(() => {
     console.log('[GoogleSignIn] useEffect triggered', {
       isScriptLoaded,
       hasGoogleAPI: !!window.google,
       hasAccountsAPI: !!(window.google?.accounts?.id),
-      hasButtonRef: !!buttonRef.current,
-      buttonRefElement: buttonRef.current
     });
 
-    if (isScriptLoaded && window.google?.accounts?.id && buttonRef.current) {
-      console.log('[GoogleSignIn] Rendering Google Sign-In button...');
-
-      // Clear any existing content
-      buttonRef.current.innerHTML = '';
+    if (isScriptLoaded && window.google?.accounts?.id) {
+      console.log('[GoogleSignIn] Initializing Google Sign-In...');
 
       window.google.accounts.id.initialize({
         client_id: CLIENT_ID,
         callback: handleCredentialResponse,
       });
 
-      window.google.accounts.id.renderButton(buttonRef.current, {
-        theme: 'outline',
-        size: 'medium',
-        text: 'signin',
-        shape: 'rectangular',
-        width: window.innerWidth < 640 ? 90 : 240,
-      });
-
-      console.log('[GoogleSignIn] Button rendered successfully');
+      console.log('[GoogleSignIn] Google Sign-In initialized successfully');
     } else {
-      console.log('[GoogleSignIn] Skipping button render - conditions not met');
+      console.log('[GoogleSignIn] Skipping initialization - conditions not met');
     }
   }, [isScriptLoaded, CLIENT_ID]);
+
+  const handleCustomButtonClick = () => {
+    if (isScriptLoaded && window.google?.accounts?.id) {
+      setIsPrompting(true);
+      // Try to show the one-tap prompt first
+      try {
+        window.google.accounts.id.prompt();
+        // If prompt doesn't work, render a hidden button and trigger it as fallback
+        setTimeout(() => {
+          setIsPrompting(false);
+          if (buttonRef.current) {
+            buttonRef.current.innerHTML = '';
+            buttonRef.current.style.display = 'block';
+            buttonRef.current.style.position = 'fixed';
+            buttonRef.current.style.left = '-9999px';
+            
+            window.google.accounts.id.renderButton(buttonRef.current, {
+              theme: 'outline',
+              size: 'large',
+              text: 'signin_with',
+              width: 200,
+            });
+            
+            // Wait a bit for the button to render, then trigger click
+            setTimeout(() => {
+              const button = buttonRef.current?.querySelector('div[role="button"]') as HTMLElement;
+              if (button) {
+                button.click();
+              }
+              if (buttonRef.current) {
+                buttonRef.current.style.display = 'none';
+              }
+            }, 100);
+          }
+        }, 500);
+      } catch (error) {
+        console.log('[GoogleSignIn] Prompt failed, using popup');
+        setIsPrompting(false);
+        // Render hidden button as fallback
+        if (buttonRef.current) {
+          buttonRef.current.innerHTML = '';
+          buttonRef.current.style.display = 'block';
+          buttonRef.current.style.position = 'fixed';
+          buttonRef.current.style.left = '-9999px';
+          
+          window.google.accounts.id.renderButton(buttonRef.current, {
+            theme: 'outline',
+            size: 'large',
+            text: 'signin_with',
+            width: 200,
+          });
+          
+          setTimeout(() => {
+            const button = buttonRef.current?.querySelector('div[role="button"]') as HTMLElement;
+            if (button) {
+              button.click();
+            }
+            if (buttonRef.current) {
+              buttonRef.current.style.display = 'none';
+            }
+          }, 100);
+        }
+      }
+    }
+  };
 
   if (!CLIENT_ID) {
     console.warn('[GoogleSignIn] CLIENT_ID is missing');
@@ -199,7 +252,21 @@ export default function GoogleSignIn({ onSignIn }: GoogleSignInProps) {
           setIsScriptLoaded(true);
         }}
       />
-      <div ref={buttonRef} data-google-signin-container />
+      <button
+        onClick={handleCustomButtonClick}
+        disabled={!isScriptLoaded || isPrompting}
+        className="text-[11px] sm:text-xs px-2 sm:px-5 py-2 bg-espresso/5 hover:bg-espresso/10 text-espresso rounded-lg transition-colors inline-flex items-center space-x-1 sm:space-x-1.5 border-brown border border-transperant hover:border-espresso disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+      >
+        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        <span className="hidden sm:inline">Sign in</span>
+        <span className="sm:hidden">Sign in</span>
+      </button>
+      <div ref={buttonRef} style={{ display: 'none' }} />
     </>
   );
 }

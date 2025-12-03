@@ -214,7 +214,6 @@ export default function SavedPage() {
                 priceLevel: place.price_level,
                 regularOpeningHours: place.opening_hours,
                 photos: place.photos,
-                editorialSummary: (place as any).editorial_summary?.overview,
                 location: place.geometry?.location,
                 photoUrl: cafe.photoUrl, // Use cached photo URL
               });

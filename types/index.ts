@@ -1,31 +1,15 @@
-export interface VibeToggles {
-  roastery: boolean;
-  lightRoast: boolean;
-  laptopFriendly: boolean;
-  nightOwl: boolean;
-  cozy: boolean;
-  minimalist: boolean;
-  allowsDogs: boolean;
-  servesVegetarian: boolean;
-  brunch: boolean;
-}
+// Updated to support dynamic vibes (40+ vibes instead of hardcoded 9)
+// Backward compatible: can still be used as the old interface
+export type VibeToggles = Record<string, boolean>;
 
 /**
  * Normalize vibes object to ensure all fields are present with defaults
  * Useful for backward compatibility when parsing from JSON
+ * Now supports dynamic vibes (any vibe ID)
  */
 export function normalizeVibes(vibes: Partial<VibeToggles>): VibeToggles {
-  return {
-    roastery: vibes.roastery ?? false,
-    lightRoast: vibes.lightRoast ?? false,
-    laptopFriendly: vibes.laptopFriendly ?? false,
-    nightOwl: vibes.nightOwl ?? false,
-    cozy: vibes.cozy ?? false,
-    minimalist: vibes.minimalist ?? false,
-    allowsDogs: vibes.allowsDogs ?? false,
-    servesVegetarian: vibes.servesVegetarian ?? false,
-    brunch: vibes.brunch ?? false,
-  };
+  // Simply return the vibes object as-is since it's now a Record<string, boolean>
+  return vibes as VibeToggles;
 }
 
 export interface SearchParams {
@@ -49,8 +33,8 @@ export interface PlaceBasicInfo {
   regularOpeningHours?: google.maps.places.PlaceOpeningHours; // New API uses 'regularOpeningHours'
   photos?: google.maps.places.PlacePhoto[];
   photoUrl?: string; // Cached photo URL for restored results
-  editorialSummary?: string; // New API uses camelCase, we'll extract the overview
-  // Atmosphere & Amenities (Enterprise + Atmosphere SKU)
+  // Note: Removed editorialSummary to reduce API costs (Enterprise tier instead of Enterprise + Atmosphere)
+  // Atmosphere & Amenities (Enterprise + Atmosphere SKU - only fetched for premium users)
   outdoorSeating?: boolean;
   takeout?: boolean;
   delivery?: boolean;
@@ -67,6 +51,7 @@ export interface PlaceBasicInfo {
   servesDinner?: boolean;
   servesBeer?: boolean;
   servesWine?: boolean;
+  servesCocktails?: boolean;
   servesVegetarianFood?: boolean;
   allowsDogs?: boolean;
   restroom?: boolean;
@@ -103,12 +88,25 @@ export interface RedditPost {
   subreddit: string;
 }
 
+export type SubscriptionTier = 'free' | 'premium';
+
+export interface SubscriptionInfo {
+  tier: SubscriptionTier;
+  paypalPayerId?: string;
+  paypalSubscriptionId?: string;
+  currentPeriodEnd?: string; // ISO timestamp
+  cancelAtPeriodEnd?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface UserProfile {
   sub: string;
   name: string;
   email: string;
   picture?: string;
   token?: string; // JWT token for authentication
+  subscription?: SubscriptionInfo; // Subscription tier and details
 }
 
 export interface SavedCafe {

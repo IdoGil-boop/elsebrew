@@ -158,6 +158,22 @@ export const analytics = {
   freeTextSearch: (params: { has_text: boolean }) =>
     track({ name: 'free_text_search', params }),
 
+  // Subscription events
+  subscriptionStarted: (userId: string, tier: string) =>
+    track({ name: 'subscription_started', params: { userId, tier } }),
+
+  subscriptionCancelled: (userId: string) =>
+    track({ name: 'subscription_cancelled', params: { userId } }),
+
+  premiumVibeClicked: (vibeId: string, isLocked: boolean) =>
+    track({ name: 'premium_vibe_clicked', params: { vibeId, isLocked } }),
+
+  upgradeModalShown: (source: string) =>
+    track({ name: 'upgrade_modal_shown', params: { source } }),
+
+  upgradeCompleted: (userId: string, amount: number) =>
+    track({ name: 'upgrade_completed', params: { userId, amount } }),
+
   // Export track for custom events
   track,
 };

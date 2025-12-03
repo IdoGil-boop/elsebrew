@@ -152,13 +152,23 @@ export const storage = {
   },
 
   // Results state (for restoring results page)
-  getResultsState: (): { searchParams: string; results: any[]; mapCenter?: { lat: number; lng: number } } | null => {
+  getResultsState: (): {
+    searchParams: string;
+    results: any[];
+    mapCenter?: { lat: number; lng: number };
+    destinationCircle?: { center: { lat: number; lng: number }; radius: number } | null;
+  } | null => {
     if (typeof window === 'undefined') return null;
     const data = sessionStorage.getItem(STORAGE_KEYS.RESULTS_STATE);
     return data ? JSON.parse(data) : null;
   },
 
-  setResultsState: (searchParams: string | null, results?: any[], mapCenter?: { lat: number; lng: number }) => {
+  setResultsState: (
+    searchParams: string | null,
+    results?: any[],
+    mapCenter?: { lat: number; lng: number },
+    destinationCircle?: { center: { lat: number; lng: number }; radius: number } | null
+  ) => {
     if (typeof window === 'undefined') return;
     if (searchParams && results) {
       // Store simplified results (without Google Maps objects which aren't serializable)
@@ -235,6 +245,7 @@ export const storage = {
         searchParams,
         results: simplifiedResults,
         mapCenter: mapCenter || null,
+        destinationCircle: destinationCircle || null,
       }));
     } else {
       sessionStorage.removeItem(STORAGE_KEYS.RESULTS_STATE);

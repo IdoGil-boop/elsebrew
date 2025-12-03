@@ -141,6 +141,7 @@ export const TABLES = {
   PLACE_INTERACTIONS: process.env.DYNAMODB_PLACE_INTERACTIONS_TABLE || 'elsebrew-place-interactions',
   RATE_LIMITS: process.env.DYNAMODB_RATE_LIMITS_TABLE || 'elsebrew-rate-limits',
   EMAIL_SUBSCRIPTIONS: process.env.DYNAMODB_EMAIL_SUBSCRIPTIONS_TABLE || 'elsebrew-email-subscriptions',
+  SUBSCRIPTIONS: process.env.DYNAMODB_SUBSCRIPTIONS_TABLE || 'elsebrew-subscriptions',
 };
 
 // Types
@@ -694,9 +695,18 @@ const RATE_LIMIT_WINDOW_HOURS = parseInt(process.env.RATE_LIMIT_WINDOW_HOURS || 
 const RATE_LIMIT_MAX_SEARCHES = parseInt(process.env.RATE_LIMIT_MAX_SEARCHES || '10', 10);
 
 /**
- * Get rate limit configuration
+ * Get rate limit configuration based on subscription tier
  */
-export function getRateLimitConfig(): { maxSearches: number; windowHours: number } {
+export function getRateLimitConfig(tier?: import('@/types').SubscriptionTier): { maxSearches: number; windowHours: number } {
+  if (tier === 'premium') {
+    // Premium users get effectively unlimited searches
+    return {
+      maxSearches: 999999,
+      windowHours: 24,
+    };
+  }
+
+  // Free users get standard rate limits
   return {
     maxSearches: RATE_LIMIT_MAX_SEARCHES,
     windowHours: RATE_LIMIT_WINDOW_HOURS,
@@ -1088,6 +1098,114 @@ export async function unsubscribeEmail(email: string): Promise<void> {
       Key: { email: email.toLowerCase().trim() },
     })
   );
+}
+
+// Subscription operations
+export async function getUserSubscription(userId: string): Promise<import('@/types').SubscriptionInfo> {
+  try {
+    const db = await getDynamoDB();
+    const result = await db.send(
+      new GetCommand({
+        TableName: TABLES.SUBSCRIPTIONS,
+        Key: { userId },
+      })
+    );
+
+    if (result.Item) {
+      return result.Item as import('@/types').SubscriptionInfo;
+    }
+
+    // No subscription found, return default free tier
+    return {
+      tier: 'free',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    logger.error('[Subscription] Error fetching subscription:', error);
+    // Default to free tier on error
+    return {
+      tier: 'free',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+}
+
+export async function updateUserSubscription(
+  userId: string,
+  subscription: import('@/types').SubscriptionInfo
+): Promise<void> {
+  const db = await getDynamoDB();
+  await db.send(
+    new PutCommand({
+      TableName: TABLES.SUBSCRIPTIONS,
+      Item: {
+        userId,
+        ...subscription,
+        updatedAt: new Date().toISOString(),
+      },
+    })
+  );
+  logger.debug(`[Subscription] Updated subscription for user ${userId} to ${subscription.tier}`);
+}
+
+export async function queryUserByStripeCustomerId(customerId: string): Promise<string | null> {
+  try {
+    const db = await getDynamoDB();
+
+    // Query the subscriptions table using a GSI on stripeCustomerId
+    // Note: This requires a GSI to be created on the stripeCustomerId field
+    const result = await db.send(
+      new QueryCommand({
+        TableName: TABLES.SUBSCRIPTIONS,
+        IndexName: 'stripeCustomerId-index', // GSI name
+        KeyConditionExpression: 'stripeCustomerId = :customerId',
+        ExpressionAttributeValues: {
+          ':customerId': customerId,
+        },
+        Limit: 1,
+      })
+    );
+
+    if (result.Items && result.Items.length > 0) {
+      return result.Items[0].userId;
+    }
+
+    return null;
+  } catch (error) {
+    logger.error('[Subscription] Error querying user by Stripe customer ID:', error);
+    return null;
+  }
+}
+
+export async function queryUserByPayPalSubscriptionId(subscriptionId: string): Promise<string | null> {
+  try {
+    const db = await getDynamoDB();
+
+    // Query the subscriptions table using a GSI on paypalSubscriptionId
+    // Note: This requires a GSI to be created on the paypalSubscriptionId field
+    const result = await db.send(
+      new QueryCommand({
+        TableName: TABLES.SUBSCRIPTIONS,
+        IndexName: 'paypalSubscriptionId-index', // GSI name
+        KeyConditionExpression: 'paypalSubscriptionId = :subscriptionId',
+        ExpressionAttributeValues: {
+          ':subscriptionId': subscriptionId,
+        },
+        Limit: 1,
+      })
+    );
+
+    if (result.Items && result.Items.length > 0) {
+      return result.Items[0].userId;
+    }
+
+    return null;
+  } catch (error) {
+    logger.error('[Subscription] Error querying user by PayPal subscription ID:', error);
+    return null;
+  }
 }
 
 export default getDynamoDB;

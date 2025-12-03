@@ -62,11 +62,17 @@ export default function Header() {
 
   const handleSignOut = () => {
     console.log('[Header] Sign out clicked');
+    const currentPath = window.location.pathname;
     storage.setUserProfile(null);
     setUser(null);
     setIsDropdownOpen(false);
     console.log('[Header] Dispatching auth change event');
     window.dispatchEvent(new Event('elsebrew_auth_change'));
+    
+    // If not on main page, redirect with toast message
+    if (currentPath !== '/') {
+      window.location.href = '/?toast=logout';
+    }
   };
 
   const handleBuyMeCoffee = () => {

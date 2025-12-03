@@ -2,22 +2,43 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/auth';
 import { getClientIp } from '@/lib/ip-utils';
 import { checkAndIncrementRateLimit, getRateLimitConfig } from '@/lib/dynamodb';
+import { getUserSubscription } from '@/lib/subscription';
 import { logger } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
-    // Get rate limit configuration
-    const { maxSearches, windowHours } = getRateLimitConfig();
-    
     // Get user ID and IP address
     const user = await getUserFromRequest(request);
     const ip = getClientIp(request);
-    
+
     let userId: string;
     if (user) {
       userId = user.sub;
     } else {
       userId = `ip-${ip}`;
+    }
+
+    // Get user's subscription tier
+    const subscription = await getUserSubscription(user?.sub);
+
+    // Get rate limit configuration based on tier
+    const { maxSearches, windowHours } = getRateLimitConfig(subscription.tier);
+
+    // Premium users bypass rate limiting
+    if (subscription.tier === 'premium') {
+      logger.debug('[Rate Limit API] Premium user - bypassing rate limit:', {
+        userId,
+      });
+      return NextResponse.json({
+        allowed: true,
+        remaining: 999999,
+        resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        currentCount: 0,
+        limit: 999999,
+        windowHours: 24,
+        isAuthenticated: !!user,
+        isPremium: true,
+      });
     }
 
     // Check and increment rate limit for BOTH user ID and IP (OR condition)

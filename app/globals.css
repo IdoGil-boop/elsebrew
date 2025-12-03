@@ -93,3 +93,12 @@ input[type="checkbox"] {
   accent-color: #5B4636;
   cursor: pointer;
 }
+
+/* Google Sign-In button styling to match header */
+div[data-google-signin-container] {
+  filter: brightness(0.85) contrast(1.1);
+}
+
+div[data-google-signin-container] iframe {
+  filter: brightness(0.85) contrast(1.1);
+}

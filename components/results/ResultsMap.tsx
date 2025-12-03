@@ -1,9 +1,14 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CafeMatch } from '@/types';
 import { loadGoogleMaps } from '@/lib/maps-loader';
 import { analytics } from '@/lib/analytics';
+
+interface DestinationCircle {
+  center: google.maps.LatLngLiteral;
+  radius: number;
+}
 
 interface ResultsMapProps {
   results: CafeMatch[];
@@ -11,6 +16,7 @@ interface ResultsMapProps {
   selectedIndex: number | null;
   hoveredIndex: number | null;
   onMarkerClick: (index: number) => void;
+  destinationCircle?: DestinationCircle | null;
 }
 
 export default function ResultsMap({
@@ -19,10 +25,76 @@ export default function ResultsMap({
   selectedIndex,
   hoveredIndex,
   onMarkerClick,
+  destinationCircle,
 }: ResultsMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
+  const destinationCircleRef = useRef<google.maps.Circle | null>(null);
+  const destinationMarkerRef = useRef<google.maps.Marker | null>(null);
+  const destinationCircleDataRef = useRef<DestinationCircle | null>(null);
+  const [isMapReady, setIsMapReady] = useState(false);
+
+  const clearDestinationOverlay = () => {
+    if (destinationCircleRef.current) {
+      destinationCircleRef.current.setMap(null);
+      destinationCircleRef.current = null;
+    }
+    if (destinationMarkerRef.current) {
+      destinationMarkerRef.current.setMap(null);
+      destinationMarkerRef.current = null;
+    }
+  };
+
+  const drawDestinationOverlay = async (circleData: DestinationCircle) => {
+    if (!mapInstanceRef.current) return;
+
+    const google =
+      (window as any)?.google ??
+      (await loadGoogleMaps());
+
+    // Draw a red pin marker for the establishment destination (like Google Maps)
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 48;
+    const ctx = canvas.getContext('2d');
+
+    if (ctx) {
+      // Draw red pin shape
+      ctx.fillStyle = '#EA4335'; // Google Maps red
+
+      // Pin head (circle)
+      ctx.beginPath();
+      ctx.arc(16, 16, 12, 0, 2 * Math.PI);
+      ctx.fill();
+
+      // Pin point (triangle)
+      ctx.beginPath();
+      ctx.moveTo(16, 28);
+      ctx.lineTo(8, 20);
+      ctx.lineTo(24, 20);
+      ctx.closePath();
+      ctx.fill();
+
+      // White circle in center
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath();
+      ctx.arc(16, 16, 5, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+
+    destinationMarkerRef.current = new google.maps.Marker({
+      map: mapInstanceRef.current,
+      position: circleData.center,
+      icon: {
+        url: canvas.toDataURL(),
+        scaledSize: new google.maps.Size(32, 48),
+        anchor: new google.maps.Point(16, 48), // Bottom center anchor (tip of pin)
+      },
+      zIndex: 1100,
+      title: 'Destination',
+    });
+  };
 
   // Initialize map once
   useEffect(() => {
@@ -49,6 +121,12 @@ export default function ResultsMap({
       });
 
       mapInstanceRef.current = map;
+      setIsMapReady(true);
+
+      // If we already have destination data (e.g., restored state), draw it now
+      if (destinationCircleDataRef.current) {
+        drawDestinationOverlay(destinationCircleDataRef.current);
+      }
     };
 
     initMap();
@@ -59,7 +137,9 @@ export default function ResultsMap({
     const updateMarkers = async () => {
       if (!mapInstanceRef.current) return;
 
-      const google = await loadGoogleMaps();
+      const google =
+        (window as any)?.google ??
+        (await loadGoogleMaps());
 
       // Clear existing markers
       markersRef.current.forEach(marker => marker.setMap(null));
@@ -132,7 +212,7 @@ export default function ResultsMap({
       });
 
       // Fit bounds to show all markers, or use center if no markers
-      if (results.length > 0) {
+      if (results.length > 0 || destinationCircle) {
         // Collect all valid positions
         const bounds = new google.maps.LatLngBounds();
         let hasValidPositions = false;
@@ -158,6 +238,25 @@ export default function ResultsMap({
           }
         });
 
+        if (destinationCircle) {
+          const { center: destCenter, radius } = destinationCircle;
+          const radiusKm = radius / 1000;
+          const latDelta = radiusKm / 111;
+          const lngDelta = radiusKm / (111 * Math.cos((destCenter.lat * Math.PI) / 180));
+
+          const centerLatLng = new google.maps.LatLng(destCenter.lat, destCenter.lng);
+          bounds.extend(centerLatLng);
+          bounds.extend(new google.maps.LatLng(destCenter.lat + latDelta, destCenter.lng));
+          bounds.extend(new google.maps.LatLng(destCenter.lat - latDelta, destCenter.lng));
+          bounds.extend(new google.maps.LatLng(destCenter.lat, destCenter.lng + lngDelta));
+          bounds.extend(new google.maps.LatLng(destCenter.lat, destCenter.lng - lngDelta));
+          bounds.extend(new google.maps.LatLng(destCenter.lat + latDelta, destCenter.lng + lngDelta));
+          bounds.extend(new google.maps.LatLng(destCenter.lat + latDelta, destCenter.lng - lngDelta));
+          bounds.extend(new google.maps.LatLng(destCenter.lat - latDelta, destCenter.lng + lngDelta));
+          bounds.extend(new google.maps.LatLng(destCenter.lat - latDelta, destCenter.lng - lngDelta));
+          hasValidPositions = true;
+        }
+
         if (hasValidPositions) {
           // Fit bounds to show all markers
           mapInstanceRef.current.fitBounds(bounds);
@@ -173,7 +272,28 @@ export default function ResultsMap({
     };
 
     updateMarkers();
-  }, [results, center, onMarkerClick]);
+  }, [results, center, onMarkerClick, destinationCircle]);
+
+  // Draw destination circle/marker for point destinations
+  useEffect(() => {
+    destinationCircleDataRef.current = destinationCircle ?? null;
+
+    const updateDestinationOverlay = async () => {
+      clearDestinationOverlay();
+
+      if (!destinationCircle || !isMapReady || !mapInstanceRef.current) {
+        return;
+      }
+
+      await drawDestinationOverlay(destinationCircle);
+    };
+
+    updateDestinationOverlay();
+
+    return () => {
+      clearDestinationOverlay();
+    };
+  }, [destinationCircle, isMapReady]);
 
   // Update marker styles based on selection/hover
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { PlaceBasicInfo, VibeToggles, CafeMatch } from '@/types';
 import { buildSearchKeywords, scoreCafe, calculateDistance } from './scoring';
 import { AdvancedPlaceFieldValues } from './googlePlaceFields';
+import { buildVibeQueryKeywords } from './vibes';
 
 async function fetchAdvancedPlaceFields(
   placeIds: string[],
@@ -23,6 +24,7 @@ async function fetchAdvancedPlaceFields(
         vibes,
         keywords,
         freeText,
+        forRecommendations: false, // Explicitly false - this is for search results, not recommendations
       }),
     });
 
@@ -93,47 +95,20 @@ function vibeToPlaceTypes(vibes: VibeToggles): string[] {
 /**
  * Build enhanced text query that includes vibe-related keywords
  */
+/**
+ * Build text query enhanced with vibe keywords
+ * Now supports dynamic vibes using the new vibe system (40+ vibes)
+ */
 function buildVibeEnhancedQuery(baseKeywords: string[], vibes: VibeToggles): string {
-  const vibeKeywords: string[] = [];
+  // Get keywords from selected vibes using the new vibe system
+  const vibeKeywords = buildVibeQueryKeywords(vibes);
 
-  if (vibes.roastery) {
-    vibeKeywords.push('roastery', 'roaster');
-  }
+  // Combine base keywords with vibe keywords (limit to 5 total)
+  const allKeywords = [
+    ...baseKeywords.slice(0, 2),
+    ...vibeKeywords.slice(0, 3)
+  ];
 
-  if (vibes.lightRoast) {
-    vibeKeywords.push('light roast', 'specialty coffee');
-  }
-
-  if (vibes.laptopFriendly) {
-    vibeKeywords.push('workspace', 'wifi', 'laptop friendly');
-  }
-
-  if (vibes.nightOwl) {
-    vibeKeywords.push('late night', 'open late');
-  }
-
-  if (vibes.cozy) {
-    vibeKeywords.push('cozy', 'intimate');
-  }
-
-  if (vibes.minimalist) {
-    vibeKeywords.push('minimalist', 'modern', 'clean design');
-  }
-
-  if (vibes.allowsDogs) {
-    vibeKeywords.push('dog friendly', 'pet friendly');
-  }
-
-  if (vibes.servesVegetarian) {
-    vibeKeywords.push('vegetarian', 'vegan options');
-  }
-
-  if (vibes.brunch) {
-    vibeKeywords.push('brunch', 'breakfast');
-  }
-
-  // Combine base keywords with top 2 vibe keywords
-  const allKeywords = [...baseKeywords.slice(0, 2), ...vibeKeywords.slice(0, 2)];
   return allKeywords.slice(0, 5).join(' ');
 }
 
@@ -228,6 +203,7 @@ export const searchCafes = async (
     textQuery, // Personalized query from user's loved cafe vibes
     fields: [
       // Basic Data fields - these are available in searchByText
+      // Note: Removed 'editorialSummary' to drop from Enterprise + Atmosphere to Enterprise tier
       'id',
       'displayName',
       'location',
@@ -239,7 +215,6 @@ export const searchCafes = async (
       'primaryType',
       'regularOpeningHours',
       'photos',
-      'editorialSummary',
     ],
     includedType: 'coffee_shop',
     maxResultCount: 20, // Increased from 15 to get more results per page
@@ -298,35 +273,36 @@ export const searchCafes = async (
       });
     }
   } else {
-    // For specific points (hotels, restaurants, etc.), use circular restriction
-    const ne = destinationBounds.getNorthEast();
-    const sw = destinationBounds.getSouthWest();
-    const radius = calculateDistance(ne, sw) * 1000 / 2; // Convert km to meters, use half diagonal
-    const cappedRadius = Math.min(radius, 50000); // Cap at 50km (API max)
+    // For specific points (hotels, restaurants, etc.), use a wide rectangular area
+    // We'll penalize by distance in scoring instead of hard restrictions
+    console.log('[Places Search] Using wide rectangular area for establishment destination');
 
-    console.log('[Places Search] Calculated radius for point destination', {
-      radius: `${radius}m (${(radius / 1000).toFixed(1)}km)`,
-      cappedRadius: `${cappedRadius}m (${(cappedRadius / 1000).toFixed(1)}km)`,
-    });
+    // Create a bounding box with ~10km radius for good coverage
+    const radiusKm = 10;
+    const latDelta = radiusKm / 111; // degrees
+    const lngDelta = radiusKm / (111 * Math.cos((destinationCenter.lat() * Math.PI) / 180)); // degrees
 
     searchRequest.locationRestriction = {
-      circle: {
-        center: {
-          latitude: destinationCenter.lat(),
-          longitude: destinationCenter.lng(),
-        },
-        radius: cappedRadius,
-      },
+      north: Math.min(90, destinationCenter.lat() + latDelta),
+      south: Math.max(-90, destinationCenter.lat() - latDelta),
+      east: destinationCenter.lng() + lngDelta,
+      west: destinationCenter.lng() - lngDelta,
     };
-    console.log('[Places Search] Using circular restriction for point destination', {
+    console.log('[Places Search] Using 10km rectangular search area around establishment', {
       center: { lat: destinationCenter.lat(), lng: destinationCenter.lng() },
-      radius: `${cappedRadius}m (${(cappedRadius / 1000).toFixed(1)}km)`,
+      radiusKm: 10,
     });
   }
 
   console.log('[Places Search] 🔍 Calling searchByText API with:', {
     textQuery,
-    locationStrategy: isAreaDestination ? 'rectangle' : 'circle',
+    textQueryBreakdown: {
+      baseKeywords: keywords,
+      typeKeywords,
+      allKeywords,
+    },
+    locationStrategy: isAreaDestination ? 'restriction (rectangle)' : 'bias (5km circle)',
+    locationRestriction: searchRequest.locationRestriction,
     includedType: searchRequest.includedType,
     maxResultCount: searchRequest.maxResultCount,
     fieldCount: searchRequest.fields.length,
@@ -335,7 +311,7 @@ export const searchCafes = async (
   try {
     const response = await google.maps.places.Place.searchByText(searchRequest);
     const { places } = response;
-    const nextPageToken = (response as any).nextPageToken; // Google may provide a token for next page
+    const nextPageToken = (response as any).nextPageToken;
 
     console.log('[Places Search] Google Places API response', {
       resultCount: places?.length || 0,
@@ -536,10 +512,33 @@ export const searchCafes = async (
           ? calculateDistance(destinationCenter, place.location)
           : undefined;
 
+        // Apply distance penalty for establishments (not area destinations)
+        // Penalize places based on distance from destination center
+        let distancePenalty = 0;
+        if (!isAreaDestination && distanceToCenter !== undefined) {
+          // Calculate viewport radius (half the diagonal distance)
+          const ne = destinationBounds.getNorthEast();
+          const sw = destinationBounds.getSouthWest();
+          const rawViewportRadiusKm = calculateDistance(ne, sw) / 2;
+
+          // For establishments (hotels, museums, etc.), the viewport is often too small
+          // Use a minimum of 2km to allow for reasonable walking distance cafes
+          const viewportRadiusKm = Math.max(2, rawViewportRadiusKm);
+
+          // Apply penalty for results beyond the viewport radius
+          // Gradual penalty: -1 point per km beyond viewport
+          const distanceKm = distanceToCenter;
+          if (distanceKm > viewportRadiusKm) {
+            distancePenalty = Math.floor(distanceKm - viewportRadiusKm);
+            console.log(`[Places Search] Distance penalty for ${place.displayName}: -${distancePenalty} points (${distanceKm.toFixed(2)}km from destination, viewport radius: ${viewportRadiusKm.toFixed(2)}km, raw: ${rawViewportRadiusKm.toFixed(2)}km)`);
+          }
+        }
+
         // Penalize previously seen places by reducing their score by 50%
         // This ensures fresh cafes appear first while keeping seen ones as fallback
         const wasPreviouslySeen = seenPlaceIds.has(place.id);
-        const adjustedScore = wasPreviouslySeen ? score * 0.5 : score;
+        let adjustedScore = score - distancePenalty;
+        adjustedScore = wasPreviouslySeen ? adjustedScore * 0.5 : adjustedScore;
 
         if (wasPreviouslySeen) {
           console.log(`[Places Search] Penalizing previously seen place: ${place.displayName} (score: ${score.toFixed(2)} → ${adjustedScore.toFixed(2)})`);

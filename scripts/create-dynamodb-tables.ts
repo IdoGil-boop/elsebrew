@@ -21,6 +21,7 @@ const TABLES = {
   PLACE_INTERACTIONS: process.env.DYNAMODB_PLACE_INTERACTIONS_TABLE || 'elsebrew-place-interactions',
   RATE_LIMITS: process.env.DYNAMODB_RATE_LIMITS_TABLE || 'elsebrew-rate-limits',
   EMAIL_SUBSCRIPTIONS: process.env.DYNAMODB_EMAIL_SUBSCRIPTIONS_TABLE || 'elsebrew-email-subscriptions',
+  SUBSCRIPTIONS: process.env.DYNAMODB_SUBSCRIPTIONS_TABLE || 'elsebrew-subscriptions',
 };
 
 async function tableExists(tableName: string): Promise<boolean> {
@@ -167,6 +168,43 @@ async function createEmailSubscriptionsTable() {
   console.log(`✓ Created table ${tableName}`);
 }
 
+async function createSubscriptionsTable() {
+  const tableName = TABLES.SUBSCRIPTIONS;
+
+  if (await tableExists(tableName)) {
+    console.log(`✓ Table ${tableName} already exists`);
+    return;
+  }
+
+  await client.send(
+    new CreateTableCommand({
+      TableName: tableName,
+      KeySchema: [{ AttributeName: 'userId', KeyType: 'HASH' }],
+      AttributeDefinitions: [
+        { AttributeName: 'userId', AttributeType: 'S' },
+        { AttributeName: 'paypalSubscriptionId', AttributeType: 'S' },
+        { AttributeName: 'stripeCustomerId', AttributeType: 'S' },
+      ],
+      GlobalSecondaryIndexes: [
+        {
+          IndexName: 'paypalSubscriptionId-index',
+          KeySchema: [{ AttributeName: 'paypalSubscriptionId', KeyType: 'HASH' }],
+          Projection: { ProjectionType: 'ALL' },
+        },
+        {
+          IndexName: 'stripeCustomerId-index',
+          KeySchema: [{ AttributeName: 'stripeCustomerId', KeyType: 'HASH' }],
+          Projection: { ProjectionType: 'ALL' },
+        },
+      ],
+      BillingMode: 'PAY_PER_REQUEST',
+    })
+  );
+  console.log(`✓ Created table ${tableName}`);
+  console.log(`  ✓ Created GSI: paypalSubscriptionId-index`);
+  console.log(`  ✓ Created GSI: stripeCustomerId-index (for backward compatibility)`);
+}
+
 async function main() {
   console.log('Creating DynamoDB tables...\n');
 
@@ -177,6 +215,7 @@ async function main() {
     await createPlaceInteractionsTable();
     await createRateLimitsTable();
     await createEmailSubscriptionsTable();
+    await createSubscriptionsTable();
 
     console.log('\n✓ All tables created successfully!');
     console.log('\nNote: Tables may take a few seconds to become active.');

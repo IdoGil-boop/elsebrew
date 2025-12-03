@@ -1,57 +1,157 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { loadGoogleMaps } from '@/lib/maps-loader';
-import { VibeToggles } from '@/types';
 import { analytics } from '@/lib/analytics';
 import Toast from '@/components/shared/Toast';
 import { getAuthToken, storage } from '@/lib/storage';
+import VibeSelector from './VibeSelector';
+import PricingModal from './PricingModal';
+import { getRecommendedVibes } from '@/lib/recommendedVibes';
 
 export default function SearchPanel() {
   const router = useRouter();
   const sourceInputRef = useRef<HTMLInputElement>(null);
   const destInputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [sourcePlaces, setSourcePlaces] = useState<google.maps.places.PlaceResult[]>([]);
   const [currentSourceInput, setCurrentSourceInput] = useState('');
   const [destPlace, setDestPlace] = useState<google.maps.places.PlaceResult | null>(null);
   const [freeText, setFreeText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
+  const [toastMessage, setToastMessage] = useState<string | ReactNode>('');
   const [showToast, setShowToast] = useState(false);
 
-  const [vibes, setVibes] = useState<VibeToggles>({
-    roastery: false,
-    lightRoast: false,
-    laptopFriendly: false,
-    nightOwl: false,
-    cozy: false,
-    minimalist: false,
-    allowsDogs: false,
-    servesVegetarian: false,
-    brunch: false,
-  });
+  // Premium features state
+  const [isPremium, setIsPremium] = useState(false);
+  const [showPricingModal, setShowPricingModal] = useState(false);
+  const [recommendedVibeIds, setRecommendedVibeIds] = useState<string[]>([]);
+
+  // Changed from VibeToggles to Record<string, boolean> for dynamic vibes
+  const [vibes, setVibes] = useState<Record<string, boolean>>({});
+
+  // Check subscription status on mount
+  useEffect(() => {
+    const checkSubscription = async () => {
+      try {
+        const response = await fetch('/api/user/subscription');
+        if (response.ok) {
+          const subscription = await response.json();
+          setIsPremium(subscription.tier === 'premium');
+        }
+      } catch (error) {
+        console.error('[SearchPanel] Error checking subscription:', error);
+      }
+    };
+    checkSubscription();
+  }, []);
+
+  // Fetch recommended vibes when source places change
+  useEffect(() => {
+    const fetchRecommendedVibes = async () => {
+      console.log('[SearchPanel] fetchRecommendedVibes called', {
+        sourcePlacesCount: sourcePlaces.length,
+        isPremium,
+        sourcePlaces: sourcePlaces.map(p => ({ name: p.name, place_id: p.place_id })),
+      });
+
+      // Fetch if user has source places (premium check happens in API)
+      if (sourcePlaces.length === 0) {
+        console.log('[SearchPanel] No source places, clearing recommendations');
+        setRecommendedVibeIds([]);
+        return;
+      }
+
+      try {
+        // Fetch advanced fields for source places
+        const placeIds = sourcePlaces.map(p => p.place_id).filter(Boolean) as string[];
+        console.log('[SearchPanel] Place IDs to fetch:', placeIds);
+        
+        if (placeIds.length === 0) {
+          console.warn('[SearchPanel] No valid place IDs found');
+          setRecommendedVibeIds([]);
+          return;
+        }
+
+        console.log('[SearchPanel] Fetching advanced fields from API...');
+        const response = await fetch('/api/google/places/details', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            placeIds,
+            vibes: {}, // Empty vibes to get all fields for recommendations
+            keywords: [],
+            freeText: '',
+            forRecommendations: true, // Flag to allow non-premium users to get fields for recommendations
+          }),
+        });
+
+        console.log('[SearchPanel] API response status:', response.status, response.ok);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.warn('[SearchPanel] Failed to fetch advanced fields for recommendations:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText,
+          });
+          setRecommendedVibeIds([]);
+          return;
+        }
+
+        const data = await response.json();
+        console.log('[SearchPanel] API response data:', {
+          hasFieldsByPlaceId: !!data?.fieldsByPlaceId,
+          placeIdsInResponse: data?.fieldsByPlaceId ? Object.keys(data.fieldsByPlaceId) : [],
+          fieldsSample: data?.fieldsByPlaceId ? Object.entries(data.fieldsByPlaceId).slice(0, 1).map(([id, fields]) => ({
+            placeId: id,
+            fieldCount: Object.keys(fields as object).length,
+            fields: Object.keys(fields as object),
+          })) : [],
+        });
+
+        if (!data?.fieldsByPlaceId) {
+          console.warn('[SearchPanel] No fieldsByPlaceId in response');
+          setRecommendedVibeIds([]);
+          return;
+        }
+
+        // Convert to format expected by getRecommendedVibes
+        const sourcePlacesWithFields = sourcePlaces.map(place => ({
+          placeId: place.place_id || '',
+          advancedFields: data.fieldsByPlaceId[place.place_id || ''] || {},
+          types: place.types,
+        }));
+
+        console.log('[SearchPanel] Source places with fields:', sourcePlacesWithFields.map(sp => ({
+          placeId: sp.placeId,
+          hasAdvancedFields: Object.keys(sp.advancedFields || {}).length > 0,
+          fieldCount: Object.keys(sp.advancedFields || {}).length,
+        })));
+
+        // Get recommended vibes
+        console.log('[SearchPanel] Calling getRecommendedVibes...');
+        const recommended = await getRecommendedVibes(sourcePlacesWithFields);
+        console.log('[SearchPanel] Recommended vibes returned:', recommended);
+        setRecommendedVibeIds(recommended);
+      } catch (error) {
+        console.error('[SearchPanel] Error fetching recommended vibes:', error);
+        setRecommendedVibeIds([]); // Set empty on error
+      }
+    };
+
+    fetchRecommendedVibes();
+  }, [sourcePlaces, isPremium]);
 
   useEffect(() => {
     // Restore cached form state
     const cachedState = storage.getSearchFormState();
     if (cachedState) {
       setFreeText(cachedState.freeText || '');
-      setVibes(cachedState.vibes || {
-        roastery: false,
-        lightRoast: false,
-        laptopFriendly: false,
-        nightOwl: false,
-        cozy: false,
-        minimalist: false,
-        allowsDogs: false,
-        servesVegetarian: false,
-        brunch: false,
-      });
+      // Restore vibes as Record<string, boolean>
+      setVibes(cachedState.vibes || {});
     }
 
     const initAutocomplete = async () => {
@@ -59,11 +159,10 @@ export default function SearchPanel() {
 
       // Initialize destination autocomplete first (matches DOM order)
       if (destInputRef.current) {
-        // Use types: ['(regions)'] which includes cities, neighborhoods, and addresses but not countries
-        // Combined with types: ['establishment'] for specific businesses like hotels
-        // However, since 'establishment' cannot be mixed, we'll use 'geocode' and filter client-side
+        // Explicitly include both geocode (cities, neighborhoods) and establishment (hotels, etc.)
+        // Combining these types returns all place types
         const autocompleteOptions = {
-          types: ['(regions)'], // Includes cities, neighborhoods, but should exclude countries
+          types: ['geocode', 'establishment'], // Includes both regions and establishments
           fields: ['place_id', 'name', 'geometry', 'formatted_address', 'types'],
         };
 
@@ -88,6 +187,14 @@ export default function SearchPanel() {
 
         destAutocomplete.addListener('place_changed', () => {
           const place = destAutocomplete.getPlace();
+          
+          console.log('[SearchPanel] Destination place selected:', {
+            name: place.name,
+            types: place.types,
+            place_id: place.place_id,
+            hasGeometry: !!place.geometry,
+            hasViewport: !!place.geometry?.viewport,
+          });
 
           // Filter out countries and continents
           const BLOCKED_TYPES = ['country', 'continent'];
@@ -148,23 +255,7 @@ export default function SearchPanel() {
     };
 
     initAutocomplete();
-
-    // Close dropdown when clicking outside
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const toggleVibe = (key: keyof VibeToggles) => {
-    setVibes((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const selectedVibesCount = Object.values(vibes).filter(Boolean).length;
 
   const removeSourcePlace = (placeId: string) => {
     setSourcePlaces(prev => prev.filter(p => p.place_id !== placeId));
@@ -179,7 +270,11 @@ export default function SearchPanel() {
     // Check if user is authenticated
     const userProfile = storage.getUserProfile();
     if (!userProfile || !userProfile.token) {
-      setToastMessage('☕️ Hey there! Please sign in with Google to start your search adventure. We\'d love to help you find your perfect café match! ✨');
+      setToastMessage(
+        <>
+          Hey there! Please <strong>sign in</strong> with Google to start your search adventure. We&apos;d love to help you find your perfect café match! ✨
+        </>
+      );
       setShowToast(true);
       return;
     }
@@ -282,17 +377,6 @@ export default function SearchPanel() {
     router.push(`/results?${params.toString()}`);
   };
 
-  const vibeOptions: { key: keyof VibeToggles; label: string }[] = [
-    { key: 'roastery', label: 'Roastery' },
-    { key: 'lightRoast', label: 'Light roast / filter-first' },
-    { key: 'laptopFriendly', label: 'Laptop-friendly' },
-    { key: 'nightOwl', label: 'Night-owl' },
-    { key: 'cozy', label: 'Cozy' },
-    { key: 'minimalist', label: 'Minimalist' },
-    { key: 'allowsDogs', label: 'Allows dogs' },
-    { key: 'servesVegetarian', label: 'Serves vegetarian' },
-    { key: 'brunch', label: 'Brunch' },
-  ];
 
   return (
     <motion.div
@@ -364,59 +448,14 @@ export default function SearchPanel() {
           )}
         </div>
 
-        {/* Vibe preferences dropdown */}
-        <div className="relative" ref={dropdownRef}>
-          <label className="block text-sm font-medium text-charcoal mb-2">
-            Vibe preferences (optional)
-          </label>
-          <button
-            type="button"
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="input-field w-full flex items-center justify-between"
-          >
-            <span className="text-gray-700">
-              {selectedVibesCount > 0
-                ? `${selectedVibesCount} selected`
-                : 'Select preferences'}
-            </span>
-            <svg
-              className={`w-5 h-5 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {isDropdownOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="absolute z-10 w-full mt-2 rounded-xl shadow-lg border p-2"
-              style={{ backgroundColor: '#FCF9F3', borderColor: '#E8DCC8' }}
-            >
-              {vibeOptions.map(({ key, label }) => (
-                <label
-                  key={key}
-                  className="flex items-center px-3 py-2 rounded-lg cursor-pointer transition-colors"
-                  style={{ backgroundColor: 'transparent' }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F5F1E8'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                >
-                  <input
-                    type="checkbox"
-                    checked={vibes[key]}
-                    onChange={() => toggleVibe(key)}
-                    className="w-4 h-4 text-espresso rounded focus:ring-espresso focus:ring-2"
-                    style={{ borderColor: '#E8DCC8' }}
-                  />
-                  <span className="ml-3 text-sm text-charcoal">{label}</span>
-                </label>
-              ))}
-            </motion.div>
-          )}
-        </div>
+        {/* Vibe preferences - New searchable modal with 40+ vibes */}
+        <VibeSelector
+          selectedVibes={vibes}
+          onVibesChange={setVibes}
+          recommendedVibeIds={recommendedVibeIds}
+          isPremium={isPremium}
+          onUpgradeClick={() => setShowPricingModal(true)}
+        />
 
         {/* Free text for additional preferences */}
         <div>
@@ -453,6 +492,13 @@ export default function SearchPanel() {
         isVisible={showToast}
         onClose={() => setShowToast(false)}
         duration={5000}
+      />
+
+      {/* Pricing Modal for Upgrade */}
+      <PricingModal
+        isOpen={showPricingModal}
+        onClose={() => setShowPricingModal(false)}
+        source="vibe-selector"
       />
     </motion.div>
   );

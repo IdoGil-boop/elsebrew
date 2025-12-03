@@ -1,0 +1,117 @@
+2025-11-26T15:02:22.719Z [INFO]: # Build environment configured with Standard build compute type: 8GiB Memory, 4vCPUs, 128GB Disk Space
+2025-11-26T15:02:23.418Z [INFO]: # Cloning repository: git@github.com:IdoGil-boop/elsebrew.git
+2025-11-26T15:02:24.294Z [INFO]: 
+2025-11-26T15:02:24.295Z [INFO]: Cloning into 'elsebrew'...
+2025-11-26T15:02:24.295Z [INFO]: # Switching to commit: cca6e2f398091e7935cc0d9f14bcc9a042d69385
+2025-11-26T15:02:24.312Z [INFO]: Note: switching to 'cca6e2f398091e7935cc0d9f14bcc9a042d69385'.
+                                 You are in 'detached HEAD' state. You can look around, make experimental
+                                 changes and commit them, and you can discard any commits you make in this
+                                 state without impacting any branches by switching back to a branch.
+                                 If you want to create a new branch to retain commits you create, you may
+                                 do so (now or later) by using -c with the switch command. Example:
+                                 git switch -c <new-branch-name>
+                                 Or undo this operation with:
+                                 git switch -
+                                 Turn off this advice by setting config variable advice.detachedHead to false
+                                 HEAD is now at cca6e2f Update header layout: center logo, align login and buy-me-coffee to bottom with search form width, and limit typing headline width
+2025-11-26T15:02:24.362Z [INFO]: Successfully cleaned up Git credentials
+2025-11-26T15:02:24.363Z [INFO]: # Checking for Git submodules at: /codebuild/output/src2972137796/src/elsebrew/.gitmodules
+2025-11-26T15:02:24.371Z [INFO]: # Retrieving environment cache...
+2025-11-26T15:02:24.404Z [WARNING]: ! Unable to write cache: {"code":"ERR_BAD_REQUEST","message":"Request failed with status code 404"})}
+2025-11-26T15:02:24.404Z [INFO]: ---- Setting Up SSM Secrets ----
+2025-11-26T15:02:24.404Z [INFO]: SSM params {"Path":"/amplify/d2l3hltad063n5/main/","WithDecryption":true}
+2025-11-26T15:02:24.461Z [WARNING]: !Failed to set up process.env.secrets
+2025-11-26T15:02:25.100Z [INFO]: # No package override configuration found.
+2025-11-26T15:02:25.104Z [INFO]: # Retrieving cache...
+2025-11-26T15:02:31.847Z [INFO]: # Extracting cache...
+2025-11-26T15:02:39.526Z [INFO]: # Extraction completed
+2025-11-26T15:02:39.675Z [INFO]: # Retrieved cache
+2025-11-26T15:02:45.207Z [INFO]: ## Starting Backend Build
+                                 ## Checking for associated backend environment...
+                                 ## No backend environment association found, continuing...
+2025-11-26T15:02:45.213Z [INFO]: ## Completed Backend Build
+                                 {"backendDuration": 0}
+                                 ## Starting Frontend Build
+                                 # Starting phase: preBuild
+                                 # Executing command: npm ci
+2025-11-26T15:03:05.493Z [WARNING]: npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+2025-11-26T15:03:05.830Z [WARNING]: npm warn deprecated @humanwhocodes/object-schema@2.0.3: Use @eslint/object-schema instead
+2025-11-26T15:03:05.845Z [WARNING]: npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported
+2025-11-26T15:03:05.849Z [WARNING]: npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
+2025-11-26T15:03:05.873Z [WARNING]: npm warn deprecated @humanwhocodes/config-array@0.13.0: Use @eslint/config-array instead
+2025-11-26T15:03:06.350Z [WARNING]: npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+2025-11-26T15:03:11.943Z [WARNING]: npm warn deprecated eslint@8.57.1: This version is no longer supported. Please see https://eslint.org/version-support for other options.
+2025-11-26T15:03:16.567Z [INFO]: added 518 packages, and audited 519 packages in 26s
+2025-11-26T15:03:16.572Z [INFO]: 157 packages are looking for funding
+                                 run `npm fund` for details
+2025-11-26T15:03:16.616Z [INFO]: 3 high severity vulnerabilities
+                                 To address all issues (including breaking changes), run:
+                                 npm audit fix --force
+                                 Run `npm audit` for details.
+2025-11-26T15:03:16.638Z [INFO]: # Executing command: echo "Creating .env.production for serverless functions..."
+                                 touch .env.production
+                                 # DynamoDB variables
+                                 if [ -n "$DYNAMODB_ACCESS_KEY_ID" ]; then
+                                 echo "DYNAMODB_ACCESS_KEY_ID=$DYNAMODB_ACCESS_KEY_ID" >> .env.production
+                                 fi
+                                 if [ -n "$DYNAMODB_SECRET_ACCESS_KEY" ]; then
+                                 echo "DYNAMODB_SECRET_ACCESS_KEY=$DYNAMODB_SECRET_ACCESS_KEY" >> .env.production
+                                 fi
+                                 if [ -n "$DYNAMODB_REGION" ]; then
+                                 echo "DYNAMODB_REGION=$DYNAMODB_REGION" >> .env.production
+                                 fi
+                                 # OpenAI variables
+                                 if [ -n "$OPENAI_API_KEY" ]; then
+                                 echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> .env.production
+                                 fi
+                                 if [ -n "$LLM_API_KEY" ]; then
+                                 echo "LLM_API_KEY=$LLM_API_KEY" >> .env.production
+                                 fi
+                                 if [ -n "$LLM_API_URL" ]; then
+                                 echo "LLM_API_URL=$LLM_API_URL" >> .env.production
+                                 fi
+                                 # Rate limiting variables
+                                 if [ -n "$RATE_LIMIT_MAX_SEARCHES" ]; then
+                                 echo "RATE_LIMIT_MAX_SEARCHES=$RATE_LIMIT_MAX_SEARCHES" >> .env.production
+                                 fi
+                                 if [ -n "$RATE_LIMIT_WINDOW_HOURS" ]; then
+                                 echo "RATE_LIMIT_WINDOW_HOURS=$RATE_LIMIT_WINDOW_HOURS" >> .env.production
+                                 fi
+                                 # Other variables that need to be available at runtime
+                                 if [ -n "$NEXT_PUBLIC_GA4_MEASUREMENT_ID" ]; then
+                                 echo "NEXT_PUBLIC_GA4_MEASUREMENT_ID=$NEXT_PUBLIC_GA4_MEASUREMENT_ID" >> .env.production
+                                 fi
+                                 Creating .env.production for serverless functions...
+2025-11-26T15:03:16.640Z [INFO]: # Completed phase: preBuild
+                                 # Starting phase: build
+                                 # Executing command: npm run build
+2025-11-26T15:03:16.745Z [INFO]: > elsebrew@0.1.0 build
+                                 > next build
+2025-11-26T15:03:17.419Z [INFO]: ▲ Next.js 14.2.33
+2025-11-26T15:03:17.420Z [INFO]: - Environments: .env.production
+2025-11-26T15:03:17.495Z [INFO]: Creating an optimized production build ...
+2025-11-26T15:03:35.465Z [INFO]: ✓ Compiled successfully
+2025-11-26T15:03:35.470Z [INFO]: Linting and checking validity of types ...
+2025-11-26T15:03:39.213Z [WARNING]: Failed to compile.
+2025-11-26T15:03:39.219Z [WARNING]: ./app/results/page.tsx
+                                    1016:6  Warning: React Hook useEffect has missing dependencies: 'currentSearchId', 'results', 'router', and 'searchParams'. Either include them or remove the dependency array.  react-hooks/exhaustive-deps
+                                    ./app/saved/page.tsx
+                                    373:23  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+                                    ./components/auth/GoogleSignIn.tsx
+                                    185:6  Warning: React Hook useEffect has a missing dependency: 'handleCredentialResponse'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+                                    ./components/results/DetailsDrawer.tsx
+                                    293:13  Error: No duplicate props allowed  react/jsx-no-duplicate-props
+                                    312:21  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+                                    ./components/results/ResultsList.tsx
+                                    229:19  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+                                    ./components/results/ResultsMap.tsx
+                                    55:6  Warning: React Hook useEffect has a missing dependency: 'center'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+                                    ./components/shared/Header.tsx
+                                    126:25  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+                                    info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/basic-features/eslint#disabling-rules
+2025-11-26T15:03:39.338Z [ERROR]: !!! Build failed
+2025-11-26T15:03:39.338Z [INFO]: Please read more about Amplify Hosting's support for SSR frameworks to find if your build failure is related to an unsupported feature: https://docs.aws.amazon.com/amplify/latest/userguide/amplify-ssr-framework-support.html. You may also find this troubleshooting guide useful: https://docs.aws.amazon.com/amplify/latest/userguide/troubleshooting-ssr-deployment.html
+2025-11-26T15:03:39.338Z [ERROR]: !!! Error: Command failed with exit code 1
+2025-11-26T15:03:39.339Z [INFO]: # Starting environment caching...
+2025-11-26T15:03:39.339Z [INFO]: # Environment caching completed
+

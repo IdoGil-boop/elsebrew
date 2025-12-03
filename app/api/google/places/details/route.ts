@@ -1,4 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { getUserFromRequest } from '@/lib/auth';
+import { getUserSubscription } from '@/lib/subscription';
 
 import {
   ADVANCED_PLACE_FIELDS,
@@ -10,13 +12,51 @@ import {
 const GOOGLE_PLACES_BASE_URL = 'https://places.googleapis.com/v1';
 const MAX_PLACE_DETAILS = 20;
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    // Check if user is authenticated
+    const user = await getUserFromRequest(request);
+
+    // Get user's subscription tier
+    const subscription = await getUserSubscription(user?.sub);
+
     const body = await request.json();
     const placeIds: unknown = body?.placeIds;
     const vibes: { [key: string]: boolean } = body?.vibes || {};
     const keywords: string[] = body?.keywords || [];
     const freeText: string = body?.freeText || '';
+    const forRecommendations: boolean = body?.forRecommendations === true;
+
+    // Premium feature gate: Advanced fields are only available for premium users
+    // Exception: Allow fetching fields for recommendations (source places) even for non-premium users
+    // Search results (forRecommendations=false) will return empty fields for non-premium users
+    if (subscription.tier !== 'premium' && !forRecommendations) {
+      console.log('[Places Details API] Free user attempted to access premium fields for search results - returning empty');
+      // Return empty fields for free users (unless it's for recommendations from source places)
+      if (!Array.isArray(placeIds)) {
+        return NextResponse.json(
+          { error: 'placeIds must be an array' },
+          { status: 400 },
+        );
+      }
+
+      // Return empty advanced fields for each place ID
+      const fieldsByPlaceId = placeIds.reduce(
+        (acc: Record<string, AdvancedPlaceFieldValues>, placeId: any) => {
+          if (typeof placeId === 'string') {
+            acc[placeId] = {};
+          }
+          return acc;
+        },
+        {}
+      );
+
+      return NextResponse.json({ fieldsByPlaceId });
+    }
+
+    if (forRecommendations && subscription.tier !== 'premium') {
+      console.log('[Places Details API] Non-premium user fetching fields for recommendations - allowing');
+    }
 
     if (!Array.isArray(placeIds) || placeIds.length === 0) {
       return NextResponse.json(
@@ -26,7 +66,10 @@ export async function POST(request: Request) {
     }
 
     // Determine which fields are relevant based on query
-    const relevantFields = getRelevantFields(vibes, keywords, freeText);
+    // For recommendations, fetch all fields to get comprehensive vibe matching
+    const relevantFields = forRecommendations 
+      ? [...ADVANCED_PLACE_FIELDS] 
+      : getRelevantFields(vibes, keywords, freeText);
     // Always include photos in the field mask
     const fieldMask = `photos,${relevantFields.length > 0 ? relevantFields.join(',') : ADVANCED_PLACE_FIELD_MASK}`;
 
@@ -95,12 +138,21 @@ export async function POST(request: Request) {
               filteredFields.photoUrls = photoUrls;
             }
           }
-          // Only include fields that were requested (relevantFields)
+          // Include all requested fields (for recommendations, this includes all advanced fields)
           relevantFields.forEach((field) => {
             if (data[field] !== undefined) {
               filteredFields[field] = data[field];
             }
           });
+          
+          // Also include any other advanced fields that might be present (for recommendations)
+          if (forRecommendations) {
+            ADVANCED_PLACE_FIELDS.forEach((field) => {
+              if (data[field] !== undefined && filteredFields[field] === undefined) {
+                filteredFields[field] = data[field];
+              }
+            });
+          }
 
           return { placeId, fields: filteredFields };
         } catch (error) {
