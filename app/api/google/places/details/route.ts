@@ -76,8 +76,12 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.GOOGLE_MAPS_API_KEY;
 
     if (!apiKey) {
+      console.error('[Places Details API] GOOGLE_MAPS_API_KEY is not configured');
       return NextResponse.json(
-        { error: 'Google Maps API key is not configured' },
+        { 
+          error: 'Google Maps API key is not configured',
+          details: 'GOOGLE_MAPS_API_KEY environment variable is missing. Please set it in AWS Amplify environment variables.'
+        },
         { status: 500 },
       );
     }
@@ -186,8 +190,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ fieldsByPlaceId });
   } catch (error) {
+    console.error('[Places Details API] Unexpected error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { 
+        error: errorMessage,
+        details: errorStack ? `Stack: ${errorStack}` : 'Check server logs for details'
+      },
       { status: 500 },
     );
   }

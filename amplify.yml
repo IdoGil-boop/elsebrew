@@ -36,9 +36,44 @@ frontend:
           if [ -n "$RATE_LIMIT_WINDOW_HOURS" ]; then
             echo "RATE_LIMIT_WINDOW_HOURS=$RATE_LIMIT_WINDOW_HOURS" >> .env.production
           fi
+          # Google Maps API keys
+          if [ -n "$GOOGLE_MAPS_API_KEY" ]; then
+            echo "GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY" >> .env.production
+          fi
+          if [ -n "$NEXT_PUBLIC_GOOGLE_MAPS_API_KEY" ]; then
+            echo "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=$NEXT_PUBLIC_GOOGLE_MAPS_API_KEY" >> .env.production
+          fi
+          if [ -n "$NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID" ]; then
+            echo "NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID" >> .env.production
+          fi
+          # PayPal variables
+          if [ -n "$PAYPAL_PLAN_ID" ]; then
+            echo "PAYPAL_PLAN_ID=$PAYPAL_PLAN_ID" >> .env.production
+          fi
+          if [ -n "$PAYPAL_CLIENT_ID" ]; then
+            echo "PAYPAL_CLIENT_ID=$PAYPAL_CLIENT_ID" >> .env.production
+          fi
+          if [ -n "$PAYPAL_CLIENT_SECRET" ]; then
+            echo "PAYPAL_CLIENT_SECRET=$PAYPAL_CLIENT_SECRET" >> .env.production
+          fi
+          if [ -n "$PAYPAL_ENVIRONMENT" ]; then
+            echo "PAYPAL_ENVIRONMENT=$PAYPAL_ENVIRONMENT" >> .env.production
+          fi
+          if [ -n "$PAYPAL_SUCCESS_URL" ]; then
+            echo "PAYPAL_SUCCESS_URL=$PAYPAL_SUCCESS_URL" >> .env.production
+          fi
+          if [ -n "$PAYPAL_CANCEL_URL" ]; then
+            echo "PAYPAL_CANCEL_URL=$PAYPAL_CANCEL_URL" >> .env.production
+          fi
+          if [ -n "$PAYPAL_WEBHOOK_URL" ]; then
+            echo "PAYPAL_WEBHOOK_URL=$PAYPAL_WEBHOOK_URL" >> .env.production
+          fi
           # Other variables that need to be available at runtime
           if [ -n "$NEXT_PUBLIC_GA4_MEASUREMENT_ID" ]; then
             echo "NEXT_PUBLIC_GA4_MEASUREMENT_ID=$NEXT_PUBLIC_GA4_MEASUREMENT_ID" >> .env.production
+          fi
+          if [ -n "$NEXT_PUBLIC_BASE_URL" ]; then
+            echo "NEXT_PUBLIC_BASE_URL=$NEXT_PUBLIC_BASE_URL" >> .env.production
           fi
     build:
       commands:
